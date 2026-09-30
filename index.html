@@ -121,6 +121,12 @@
             letter-spacing: 0.04em;
             flex: 1;
         }
+        .card-handle .handle-title .handle-time {
+            color: var(--warning);
+            font-weight: 700;
+            margin-left: 4px;
+            font-variant-numeric: tabular-nums;
+        }
 
         .card-resize-handle {
             position: absolute;
@@ -566,6 +572,146 @@
             text-align: right;
             font-variant-numeric: tabular-nums;
         }
+
+        /* Групповая строка (когда > 5 свечей по одному SECID) */
+        .spike-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .spike-group-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--elevated);
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s, background 0.15s;
+            flex-shrink: 0;
+        }
+        .spike-group-header:hover { transform: scale(1.02); opacity: 0.95; }
+        .spike-group-header.bull {
+            border-color: rgba(34,197,94,0.35);
+            background: var(--success-bg);
+        }
+        .spike-group-header.bull:hover { background: rgba(34,197,94,0.22); }
+        .spike-group-header.bull .spike-ticker,
+        .spike-group-header.bull .spike-change { color: var(--success); }
+        .spike-group-header.bear {
+            border-color: rgba(239,68,68,0.35);
+            background: var(--error-bg);
+        }
+        .spike-group-header.bear:hover { background: rgba(239,68,68,0.22); }
+        .spike-group-header.bear .spike-ticker,
+        .spike-group-header.bear .spike-change { color: var(--error); }
+
+        .spike-group-header .spike-toggle {
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            background: rgba(148,163,184,0.18);
+            color: var(--text);
+            font-weight: 700;
+            font-size: 14px;
+            line-height: 1;
+            flex-shrink: 0;
+            transition: transform 0.15s, background 0.15s;
+            user-select: none;
+        }
+        .spike-group-header:hover .spike-toggle { background: rgba(148,163,184,0.3); }
+        .spike-group-header.expanded .spike-toggle { transform: rotate(45deg); }
+
+        .spike-group-header .spike-ticker {
+            font-size: 13px;
+            font-weight: 700;
+            min-width: 55px;
+        }
+        .spike-group-header .spike-name {
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+        .spike-group-header .spike-count {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: rgba(15,23,42,0.5);
+            padding: 2px 8px;
+            border-radius: 10px;
+            min-width: 56px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+        .spike-group-header .spike-max-change {
+            font-size: 14px;
+            font-weight: 700;
+            min-width: 64px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .spike-group-children {
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            padding-left: 28px;
+            margin-top: -2px;
+            animation: fadeIn 0.15s ease-out;
+        }
+        .spike-group.expanded .spike-group-children {
+            display: flex;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .spike-child {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(51,65,85,0.6);
+            cursor: pointer;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .spike-child:hover { background: rgba(51,65,85,0.95); }
+        .spike-child.bull { border-color: rgba(34,197,94,0.25); }
+        .spike-child.bear { border-color: rgba(239,68,68,0.25); }
+        .spike-child .spike-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+            min-width: 88px;
+        }
+        .spike-child .spike-prices {
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .spike-child .spike-change {
+            font-size: 13px;
+            font-weight: 700;
+            min-width: 64px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .spike-child.bull .spike-change { color: var(--success); }
+        .spike-child.bear .spike-change { color: var(--error); }
+
         .spike-summary {
             font-size: 11px;
             color: var(--text-secondary);
@@ -871,10 +1017,10 @@
         </div>
 
         <!-- Карточка: резкое изменение цены -->
-        <div class="card" id="cardSpikes" data-card-id="spikes" style="width: 520px;">
+        <div class="card" id="cardSpikes" data-card-id="spikes" style="width: 560px;">
             <div class="card-handle" data-drag="true">
                 <span class="grip">⠿</span>
-                <span class="handle-title">Резкое изменение цены</span>
+                <span class="handle-title">Резкое изменение цены<span class="handle-time" id="spikesHandleTime"></span></span>
             </div>
 
             <div class="controls-row">
@@ -889,9 +1035,9 @@
                     <option value="currency/selt/CETS">CETS</option>
                     <option value="futures/forts/SPBFUT">SPBFUT</option>
                 </select>
-                <label title="Количество инструментов (1–100)">Кол-во</label>
-                <input id="spikesCount" type="number" min="1" max="100" value="10">
-                <label title="Порог изменения за 10 мин свечу, %">Порог, %</label>
+                <label title="Количество отображаемых строк (1–200)">Кол-во</label>
+                <input id="spikesCount" type="number" min="1" max="200" value="20">
+                <label title="Порог размаха свечи (high-low)/low, %">Порог, %</label>
                 <input id="spikesThreshold" type="number" min="0.1" max="100" step="0.1" value="1">
                 <button id="spikesRefreshBtn" class="btn-secondary">Обновить</button>
             </div>
@@ -966,25 +1112,49 @@
         const mapState = { board: 'stock/shares/TQBR', count: 5, items: [] };
         const gainersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
         const losersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
-        const spikesState = { board: 'stock/shares/TQBR', count: 10, threshold: 1, items: [] };
+        // rows — итоговые строки (учитывая группировку), items — плоский список свечей
+        const spikesState = { board: 'stock/shares/TQBR', count: 20, threshold: 1, rows: [], items: [], lastBegin: null };
+
+        // Свечей больше этого количества по одному SECID — группируем в одну строку со сворачиванием
+        const SPIKE_GROUP_THRESHOLD = 5;
 
         const INTERVAL_MAX_DAYS = { 10: 2, 60: 365, 24: 3650, 7: 3650 };
 
         const STORAGE_KEY = 'moex_instruments_v1';
         const STORAGE_ACTIVE_KEY = 'moex_active_index_v1';
         const STORAGE_LAYOUT_KEY = 'moex_layout_v4';
-        const STORAGE_BLOCKS_KEY = 'moex_blocks_v3';
+        const STORAGE_BLOCKS_KEY = 'moex_blocks_v4';
         const STORAGE_EXPORT_KEY = 'moex_export_v1';
+        const STORAGE_SPIKES_EXPANDED_KEY = 'moex_spikes_expanded_v1';
 
         const AUTO_REFRESH_INTERVAL = 60 * 1000;
         const SPIKES_AUTO_REFRESH_INTERVAL = 10 * 60 * 1000;
+
+        const boardSecuritiesCache = new Map();
+        const BOARD_CACHE_TTL = 30 * 1000;
+
+        // Множество раскрытых групп (secid)
+        let expandedSpikeGroups = new Set();
+        try {
+            const raw = localStorage.getItem(STORAGE_SPIKES_EXPANDED_KEY);
+            if (raw) {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) expandedSpikeGroups = new Set(arr);
+            }
+        } catch (e) {}
+
+        function saveExpandedSpikeGroups() {
+            try {
+                localStorage.setItem(STORAGE_SPIKES_EXPANDED_KEY, JSON.stringify(Array.from(expandedSpikeGroups)));
+            } catch (e) {}
+        }
 
         const DEFAULT_LAYOUT = {
             order: ['search', 'chart', 'spikes', 'export', 'map', 'gainers', 'losers'],
             sizes: {
                 search:  { width: 380, height: 600 },
                 chart:   { width: 640, height: 600 },
-                spikes:  { width: 520, height: 420 },
+                spikes:  { width: 560, height: 420 },
                 export:  { width: 380, height: 420 },
                 map:     { width: 320, height: 500 },
                 gainers: { width: 320, height: 400 },
@@ -1051,17 +1221,18 @@
                 }
                 if (data.spikes) {
                     spikesState.board = data.spikes.board || spikesState.board;
-                    spikesState.count = clampCount(data.spikes.count, 10);
+                    spikesState.count = clampCount(data.spikes.count, 20, 200);
                     spikesState.threshold = clampThreshold(data.spikes.threshold, 1);
                 }
             } catch (e) {}
         }
 
-        function clampCount(v, def) {
+        function clampCount(v, def, max) {
+            const upper = max || 100;
             const n = parseInt(v, 10);
             if (!Number.isFinite(n)) return def;
             if (n < 1) return 1;
-            if (n > 100) return 100;
+            if (n > upper) return upper;
             return n;
         }
 
@@ -1372,6 +1543,10 @@
             const timePart = isoStr.length >= 16 ? isoStr.substring(11, 16) : '';
             const [y, m, d] = datePart.split('-');
             return `${d}.${m}.${y} ${timePart}`.trim();
+        }
+        function formatTime(isoStr) {
+            if (!isoStr || isoStr.length < 16) return '';
+            return isoStr.substring(11, 16);
         }
         function getSelectedInterval() {
             const v = parseInt(document.getElementById('intervalSelect').value, 10);
@@ -2226,43 +2401,60 @@
             });
         }
 
-        async function fetchBoardSecurities(boardPath) {
-            const [engine, market, board] = boardPath.split('/');
-            const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/securities.json?iss.meta=off&iss.only=securities,marketdata`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('fetch failed');
-            const data = await res.json();
-
-            const namesMap = {};
-            if (data.securities && data.securities.data) {
-                const sCols = data.securities.columns;
-                const iSecId = sCols.indexOf('SECID');
-                const iSecName = sCols.indexOf('SECNAME');
-                if (iSecId >= 0 && iSecName >= 0) {
-                    for (const row of data.securities.data) {
-                        namesMap[row[iSecId]] = row[iSecName];
+        async function fetchBoardSecurities(boardPath, useCache) {
+            const now = Date.now();
+            if (useCache !== false) {
+                const cached = boardSecuritiesCache.get(boardPath);
+                if (cached && (now - cached.ts) < BOARD_CACHE_TTL) {
+                    try {
+                        return await cached.promise;
+                    } catch (e) {
+                        boardSecuritiesCache.delete(boardPath);
                     }
                 }
             }
 
-            const md = data.marketdata;
-            if (!md || !md.data || md.data.length === 0) return [];
-            const cols = md.columns;
-            const iTicker = cols.indexOf('SECID');
-            const iLast = cols.indexOf('LAST');
-            const iChange = cols.indexOf('LASTTOPREVPRICE');
-            const iVol = cols.indexOf('VALTODAY');
+            const promise = (async () => {
+                const [engine, market, board] = boardPath.split('/');
+                const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/securities.json?iss.meta=off&iss.only=securities,marketdata`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('fetch failed');
+                const data = await res.json();
 
-            return md.data.map(row => {
-                const ticker = row[iTicker];
-                return {
-                    ticker,
-                    name: namesMap[ticker] || ticker,
-                    last: row[iLast],
-                    changePct: row[iChange] !== null ? Number(row[iChange]) : null,
-                    volume: row[iVol] || 0
-                };
-            });
+                const namesMap = {};
+                if (data.securities && data.securities.data) {
+                    const sCols = data.securities.columns;
+                    const iSecId = sCols.indexOf('SECID');
+                    const iSecName = sCols.indexOf('SECNAME');
+                    if (iSecId >= 0 && iSecName >= 0) {
+                        for (const row of data.securities.data) {
+                            namesMap[row[iSecId]] = row[iSecName];
+                        }
+                    }
+                }
+
+                const md = data.marketdata;
+                if (!md || !md.data || md.data.length === 0) return [];
+                const cols = md.columns;
+                const iTicker = cols.indexOf('SECID');
+                const iLast = cols.indexOf('LAST');
+                const iChange = cols.indexOf('LASTTOPREVPRICE');
+                const iVol = cols.indexOf('VALTODAY');
+
+                return md.data.map(row => {
+                    const ticker = row[iTicker];
+                    return {
+                        ticker,
+                        name: namesMap[ticker] || ticker,
+                        last: row[iLast],
+                        changePct: row[iChange] !== null ? Number(row[iChange]) : null,
+                        volume: row[iVol] || 0
+                    };
+                });
+            })();
+
+            boardSecuritiesCache.set(boardPath, { ts: now, promise });
+            return promise;
         }
 
         async function loadMarketMap() {
@@ -2383,13 +2575,12 @@
         }
 
         // === Блок "Резкое изменение цены" ===
-        // Оптимизация: один запрос свечей по всей борде вместо N запросов по тикерам.
         async function fetchBoardCandles10m(boardPath, fromIso, tillIso, onProgress) {
             const [engine, market, board] = boardPath.split('/');
             const all = [];
             let start = 0;
             const limit = 500;
-            const maxPages = 60;
+            const maxPages = 200;
             let page = 0;
             let lastStart = -1;
 
@@ -2416,9 +2607,13 @@
                 const iBegin = cols.indexOf('begin');
                 const iValue = cols.indexOf('value');
 
+                if (iSecId < 0) break;
+
                 for (const row of cd.data) {
+                    const secid = row[iSecId];
+                    if (!secid) continue;
                     all.push({
-                        secid: row[iSecId],
+                        secid,
                         begin: row[iBegin],
                         open: row[iOpen],
                         high: row[iHigh],
@@ -2435,7 +2630,6 @@
             return all;
         }
 
-        // Запасной вариант: список тикеров борды → топ-N по обороту → свечи 10м по каждому.
         async function fetchBoardCandlesFallback(boardPath, fromIso, tillIso, topN, onProgress) {
             const securities = await fetchBoardSecurities(boardPath);
             const sorted = securities
@@ -2486,6 +2680,14 @@
             return all;
         }
 
+        function isCandleClosed(candle, nowMs) {
+            if (!candle || !candle.begin) return false;
+            const beginMs = Date.parse(candle.begin.replace(' ', 'T'));
+            if (!Number.isFinite(beginMs)) return true;
+            const INTERVAL_MS = 10 * 60 * 1000;
+            return (beginMs + INTERVAL_MS) <= nowMs;
+        }
+
         async function loadSpikes() {
             const loading = document.getElementById('spikesLoading');
             const list = document.getElementById('spikesList');
@@ -2500,6 +2702,7 @@
 
             const today = getTodayStr();
             const threshold = spikesState.threshold;
+            const nowMs = Date.now();
 
             try {
                 let candles = [];
@@ -2520,53 +2723,79 @@
 
                 if (candles.length === 0) {
                     spikesState.items = [];
+                    spikesState.rows = [];
+                    spikesState.lastBegin = null;
+                    document.getElementById('spikesHandleTime').textContent = '';
                     renderSpikes();
                     summary.textContent = 'Нет данных за текущий день';
                     return;
                 }
 
-                // Имена инструментов — как в блоке поиска
                 let namesMap = {};
                 try {
                     const secs = await fetchBoardSecurities(spikesState.board);
                     for (const s of secs) namesMap[s.ticker] = s.name;
                 } catch (e) {}
 
-                // Группируем по SECID, ищем свечу с максимальным % (high-low)/low
-                const byTicker = new Map();
+                // Все свечи выше порога
+                const allItems = [];
+                let lastBegin = null;
                 for (const c of candles) {
                     if (!c || c.high == null || c.low == null || c.low <= 0) continue;
+                    if (!isCandleClosed(c, nowMs)) continue;
+                    const openN = Number(c.open);
+                    const closeN = Number(c.close);
+                    if (!Number.isFinite(openN) || !Number.isFinite(closeN)) continue;
+
                     const diffPct = ((c.high - c.low) / c.low) * 100;
-                    const prev = byTicker.get(c.secid);
-                    if (!prev || diffPct > prev.diffPct) {
-                        byTicker.set(c.secid, {
-                            ticker: c.secid,
-                            name: namesMap[c.secid] || c.secid,
-                            begin: c.begin,
-                            open: c.open,
-                            close: c.close,
-                            high: c.high,
-                            low: c.low,
-                            diffPct,
-                            bullish: Number(c.close) >= Number(c.open)
-                        });
-                    }
+                    if (!Number.isFinite(diffPct) || diffPct < threshold) continue;
+
+                    if (!lastBegin || c.begin > lastBegin) lastBegin = c.begin;
+
+                    allItems.push({
+                        ticker: c.secid,
+                        name: namesMap[c.secid] || c.secid,
+                        begin: c.begin,
+                        open: openN,
+                        close: closeN,
+                        high: Number(c.high),
+                        low: Number(c.low),
+                        diffPct,
+                        bullish: closeN >= openN
+                    });
                 }
 
-                // Фильтр по порогу + сортировка по времени свечи (от большего к меньшему)
-                const filtered = Array.from(byTicker.values())
-                    .filter(x => x.diffPct >= threshold)
-                    .sort((a, b) => {
-                        const ta = a.begin || '';
-                        const tb = b.begin || '';
-                        if (ta !== tb) return tb.localeCompare(ta);
-                        return b.diffPct - a.diffPct;
-                    })
-                    .slice(0, spikesState.count);
+                // Сортировка: новые свечи сначала, при равенстве — по убыванию размаха
+                allItems.sort((a, b) => {
+                    const ta = a.begin || '';
+                    const tb = b.begin || '';
+                    if (ta !== tb) return tb.localeCompare(ta);
+                    return b.diffPct - a.diffPct;
+                });
 
-                spikesState.items = filtered;
+                spikesState.items = allItems;
+                spikesState.lastBegin = lastBegin;
+
+                // Группировка в строки. Если по одному SECID больше SPIKE_GROUP_THRESHOLD свечей — сворачиваем.
+                const rows = buildSpikeRows(allItems);
+                spikesState.rows = rows;
+
+                // Обрезаем строки до лимита "Кол-во". Групповая строка считается за одну строку.
+                const sliced = rows.slice(0, spikesState.count);
+                spikesState.rows = sliced;
+
+                const timeEl = document.getElementById('spikesHandleTime');
+                if (lastBegin) {
+                    timeEl.textContent = ` на ${formatTime(lastBegin)}`;
+                } else {
+                    timeEl.textContent = '';
+                }
+
                 renderSpikes();
-                summary.textContent = `Найдено ${filtered.length} инструм. с изменением ≥ ${threshold}% за 10 мин (всего свечей: ${candles.length})`;
+
+                const totalCandles = allItems.length;
+                const totalRows = rows.length;
+                summary.textContent = `Строк: ${sliced.length} из ${totalRows} (свечей ≥ ${threshold}%: ${totalCandles}, всего проверено: ${candles.length})`;
             } catch (e) {
                 loading.style.display = 'block';
                 loading.textContent = 'Не удалось загрузить: ' + (e.message || 'ошибка');
@@ -2577,6 +2806,77 @@
             }
         }
 
+        // Группируем плоский список свечей в строки отображения.
+        // Если по одному SECID > SPIKE_GROUP_THRESHOLD свечей — делаем одну групповую строку.
+        function buildSpikeRows(items) {
+            // Группируем по secid, сохраняя порядок первого появления (уже отсортирован по времени desc)
+            const groups = new Map(); // secid -> { secid, name, candles: [], firstIndex }
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i];
+                if (!groups.has(it.ticker)) {
+                    groups.set(it.ticker, {
+                        secid: it.ticker,
+                        name: it.name,
+                        candles: [],
+                        firstIndex: i
+                    });
+                }
+                groups.get(it.ticker).candles.push(it);
+            }
+
+            const rows = [];
+            const seen = new Set();
+            for (let i = 0; i < items.length; i++) {
+                const it = items[i];
+                const g = groups.get(it.ticker);
+                if (seen.has(it.ticker)) continue;
+                seen.add(it.ticker);
+
+                if (g.candles.length > SPIKE_GROUP_THRESHOLD) {
+                    // Групповая строка
+                    // Свеча для отображения сверху — самая новая (уже первая в candles)
+                    const head = g.candles[0];
+                    // Максимальный размах в группе для индикатора
+                    let maxDiff = -Infinity;
+                    let maxBull = true;
+                    for (const c of g.candles) {
+                        if (c.diffPct > maxDiff) {
+                            maxDiff = c.diffPct;
+                            maxBull = c.bullish;
+                        }
+                    }
+                    rows.push({
+                        type: 'group',
+                        secid: g.secid,
+                        name: g.name,
+                        candles: g.candles,
+                        head,
+                        maxDiff,
+                        maxBull,
+                        // Для сортировки: позиция первого появления в отсортированном списке
+                        sortIndex: g.firstIndex
+                    });
+                } else {
+                    // Обычные строки — каждая свеча отдельно
+                    for (const c of g.candles) {
+                        rows.push({
+                            type: 'single',
+                            secid: c.ticker,
+                            name: c.name,
+                            candle: c,
+                            sortIndex: i
+                        });
+                    }
+                }
+            }
+
+            // Сохраняем порядок как в items (уже отсортирован)
+            // Но групповые строки попадают в позицию первой свечи группы — это ок.
+            // Нужно удостовериться, что порядок согласован: пересортируем по sortIndex
+            rows.sort((a, b) => a.sortIndex - b.sortIndex);
+            return rows;
+        }
+
         function renderSpikes() {
             const listEl = document.getElementById('spikesList');
             const loadingEl = document.getElementById('spikesLoading');
@@ -2584,30 +2884,101 @@
             listEl.style.display = 'flex';
             listEl.innerHTML = '';
 
-            if (!spikesState.items || spikesState.items.length === 0) {
-                listEl.innerHTML = '<div class="empty-state-small">Нет инструментов с таким изменением</div>';
+            if (!spikesState.rows || spikesState.rows.length === 0) {
+                listEl.innerHTML = '<div class="empty-state-small">Нет свечей с таким размахом</div>';
                 return;
             }
 
-            spikesState.items.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'spike-item ' + (item.bullish ? 'bull' : 'bear');
-                const timeLabel = formatRuDateTime(item.begin);
-                const sign = item.bullish ? '+' : '-';
-                div.innerHTML = `
-                    <span class="spike-ticker">${item.ticker}</span>
-                    <span class="spike-name" title="${item.name}">${item.name}</span>
+            spikesState.rows.forEach(row => {
+                if (row.type === 'single') {
+                    listEl.appendChild(buildSingleSpikeEl(row.candle));
+                } else if (row.type === 'group') {
+                    listEl.appendChild(buildGroupSpikeEl(row));
+                }
+            });
+        }
+
+        function buildSingleSpikeEl(candle) {
+            const div = document.createElement('div');
+            div.className = 'spike-item ' + (candle.bullish ? 'bull' : 'bear');
+            const timeLabel = formatRuDateTime(candle.begin);
+            const sign = candle.bullish ? '+' : '−';
+            div.innerHTML = `
+                <span class="spike-ticker">${candle.ticker}</span>
+                <span class="spike-name" title="${candle.name}">${candle.name}</span>
+                <span class="spike-time">${timeLabel}</span>
+                <span class="spike-prices">${fmtNum(candle.low, 2)} → ${fmtNum(candle.high, 2)}</span>
+                <span class="spike-change">${sign}${fmtNum(candle.diffPct, 2)}%</span>
+            `;
+            div.addEventListener('click', () => {
+                document.getElementById('boardSelect').value = spikesState.board;
+                document.getElementById('tickerInput').value = candle.ticker;
+                addInstrument();
+            });
+            return div;
+        }
+
+        function buildGroupSpikeEl(row) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'spike-group';
+            if (expandedSpikeGroups.has(row.secid)) wrapper.classList.add('expanded');
+
+            const isBull = row.maxBull;
+            const header = document.createElement('div');
+            header.className = 'spike-group-header ' + (isBull ? 'bull' : 'bear');
+            const sign = isBull ? '+' : '−';
+            header.innerHTML = `
+                <span class="spike-toggle" title="Развернуть/свернуть">+</span>
+                <span class="spike-ticker">${row.secid}</span>
+                <span class="spike-name" title="${row.name}">${row.name}</span>
+                <span class="spike-count" title="Свечей в группе">${row.candles.length} свечей</span>
+                <span class="spike-max-change" title="Максимальный размах в группе">${sign}${fmtNum(row.maxDiff, 2)}%</span>
+            `;
+
+            const children = document.createElement('div');
+            children.className = 'spike-group-children';
+
+            row.candles.forEach(c => {
+                const child = document.createElement('div');
+                child.className = 'spike-child ' + (c.bullish ? 'bull' : 'bear');
+                const childSign = c.bullish ? '+' : '−';
+                const timeLabel = formatRuDateTime(c.begin);
+                child.innerHTML = `
                     <span class="spike-time">${timeLabel}</span>
-                    <span class="spike-prices">${fmtNum(item.low, 2)} → ${fmtNum(item.high, 2)}</span>
-                    <span class="spike-change">${sign}${fmtNum(item.diffPct, 2)}%</span>
+                    <span class="spike-prices">${fmtNum(c.low, 2)} → ${fmtNum(c.high, 2)}</span>
+                    <span class="spike-change">${childSign}${fmtNum(c.diffPct, 2)}%</span>
                 `;
-                div.addEventListener('click', () => {
+                child.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     document.getElementById('boardSelect').value = spikesState.board;
-                    document.getElementById('tickerInput').value = item.ticker;
+                    document.getElementById('tickerInput').value = c.ticker;
                     addInstrument();
                 });
-                listEl.appendChild(div);
+                children.appendChild(child);
             });
+
+            // Клик по header: переключение раскрытия. Отдельный клик по тикеру — добавление инструмента.
+            header.addEventListener('click', (e) => {
+                if (e.target.closest('.spike-ticker')) {
+                    document.getElementById('boardSelect').value = spikesState.board;
+                    document.getElementById('tickerInput').value = row.secid;
+                    addInstrument();
+                    return;
+                }
+                // toggle
+                if (expandedSpikeGroups.has(row.secid)) {
+                    expandedSpikeGroups.delete(row.secid);
+                    wrapper.classList.remove('expanded');
+                } else {
+                    expandedSpikeGroups.add(row.secid);
+                    wrapper.classList.add('expanded');
+                }
+                saveExpandedSpikeGroups();
+            });
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(children);
+            return wrapper;
         }
 
         // === Автообновление блока спайков раз в 10 минут ===
@@ -2639,7 +3010,7 @@
                 saveBlocks();
             });
             document.getElementById('spikesCount').addEventListener('change', (e) => {
-                spikesState.count = clampCount(e.target.value, 10);
+                spikesState.count = clampCount(e.target.value, 20, 200);
                 e.target.value = spikesState.count;
                 saveBlocks();
             });
