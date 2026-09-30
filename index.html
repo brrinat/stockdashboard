@@ -1,0 +1,2891 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мосбиржа — быстрый просмотр тикера</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --elevated: #334155;
+            --text: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --success-bg: rgba(34,197,94,0.15);
+            --error: #ef4444;
+            --error-bg: rgba(239,68,68,0.15);
+            --border: #475569;
+            --active: rgba(59,130,246,0.15);
+            --hover: rgba(148,163,184,0.08);
+            --magnet: #60a5fa;
+            --warning: #f59e0b;
+            --warning-bg: rgba(245,158,11,0.12);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        *::-webkit-scrollbar { width: 8px; height: 8px; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        *::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            max-width: 1800px;
+            margin: 0 auto 12px auto;
+            align-items: center;
+        }
+        .toolbar button { font-size: 12px; padding: 6px 12px; }
+        .toolbar .auto-badge {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-right: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .toolbar .auto-badge .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            width: 100%;
+            max-width: 1800px;
+            margin: 0 auto;
+            align-items: flex-start;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 260px;
+            min-height: 120px;
+            overflow: hidden;
+            transition: box-shadow 0.15s, border-color 0.15s;
+        }
+        .card.dragging { opacity: 0.35; }
+        .card.drop-target {
+            border-color: var(--magnet);
+            box-shadow: 0 0 0 2px var(--magnet), 0 10px 40px rgba(0,0,0,0.35);
+        }
+        .card.resizing { user-select: none; }
+
+        .card-handle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: -8px -8px 12px -8px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            cursor: grab;
+            user-select: none;
+            color: var(--text-secondary);
+            font-size: 12px;
+            transition: background 0.15s;
+            touch-action: none;
+        }
+        .card-handle:hover { background: var(--hover); }
+        .card-handle.active { cursor: grabbing; background: var(--hover); }
+        .card-handle .grip { font-size: 16px; line-height: 1; letter-spacing: -2px; }
+        .card-handle .handle-title {
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            flex: 1;
+        }
+
+        .card-resize-handle {
+            position: absolute;
+            right: 4px;
+            bottom: 4px;
+            width: 18px;
+            height: 18px;
+            cursor: nwse-resize;
+            opacity: 0.35;
+            transition: opacity 0.15s;
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1;
+            user-select: none;
+            touch-action: none;
+        }
+        .card:hover .card-resize-handle { opacity: 0.8; }
+        .card-resize-handle::before { content: '◢'; }
+
+        h1 { margin: 0 0 4px 0; font-size: 20px; font-weight: 700; }
+        .subtitle { color: var(--text-secondary); font-size: 12px; margin-bottom: 16px; }
+
+        .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+        select, input {
+            background: var(--elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            padding: 8px 12px;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        select:focus, input:focus { border-color: var(--accent); }
+        select { min-width: 180px; cursor: pointer; }
+        input { flex: 1; min-width: 100px; }
+        input[type="date"] { cursor: pointer; color-scheme: dark; }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.7);
+            cursor: pointer;
+        }
+        input[type="number"] {
+            cursor: text;
+            -moz-appearance: textfield;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        button {
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: var(--accent-hover); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-secondary {
+            background: var(--elevated);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+        .btn-secondary:hover { background: var(--hover); }
+        .btn-danger {
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: var(--error);
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+        .loading { display: none; margin-top: 14px; color: var(--text-secondary); font-size: 13px; }
+        .error {
+            display: none;
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(239,68,68,0.10);
+            color: var(--error);
+            font-size: 13px;
+            border: 1px solid rgba(239,68,68,0.25);
+        }
+        .success {
+            display: none;
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--success-bg);
+            color: var(--success);
+            font-size: 13px;
+            border: 1px solid rgba(34,197,94,0.3);
+        }
+
+        .list-section { margin-top: 16px; flex: 1; min-height: 0; overflow: auto; }
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .list-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .instrument-list { display: flex; flex-direction: column; gap: 4px; }
+        .instrument-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: var(--elevated);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .instrument-item:hover { background: var(--hover); }
+        .instrument-item.active { background: var(--active); border-color: var(--accent); }
+        .instrument-item .ticker { font-weight: 700; font-size: 14px; min-width: 55px; }
+        .instrument-item .board {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--card);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .instrument-item .name {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .instrument-item .price { font-weight: 700; font-size: 14px; min-width: 65px; text-align: right; }
+        .instrument-item .change { font-size: 13px; min-width: 55px; text-align: right; }
+        .instrument-item .actions { display: flex; gap: 4px; margin-left: 4px; }
+        .empty-state {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+        }
+        .empty-state-small {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 12px;
+        }
+
+        .params-row { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .param {
+            flex: 1;
+            min-width: 110px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: var(--elevated);
+            border: 1px solid var(--border);
+        }
+        .param-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
+        }
+        .param-value { font-size: 18px; font-weight: 700; line-height: 1.2; }
+        .param-name { font-size: 14px; font-weight: 600; line-height: 1.25; }
+        .param-board { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+
+        #cardChart .detail-wrap {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        .chart-wrap {
+            padding: 14px;
+            border-radius: 10px;
+            background: var(--elevated);
+            border: 1px solid var(--border);
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .chart-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .chart-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .chart-controls input[type="date"] {
+            width: 150px;
+            min-width: 0;
+            font-size: 13px;
+            padding: 6px 10px;
+        }
+        .chart-controls select {
+            min-width: 80px;
+            width: 80px;
+            font-size: 13px;
+            padding: 6px 8px;
+        }
+        .chart-controls .btn-secondary { font-size: 13px; padding: 6px 12px; }
+        .chart-info {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            min-height: 14px;
+        }
+        .canvas-wrap {
+            flex: 1;
+            min-height: 240px;
+            position: relative;
+            width: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            inset: 0;
+            cursor: crosshair;
+        }
+        .footer {
+            margin-top: 12px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        .hidden { display: none !important; }
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--text-secondary);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .controls-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .controls-row select {
+            min-width: 0;
+            flex: 1;
+            font-size: 12px;
+            padding: 6px 8px;
+        }
+        .controls-row input[type="number"] {
+            width: 60px;
+            flex: 0 0 auto;
+            min-width: 0;
+            font-size: 12px;
+            padding: 6px 8px;
+            text-align: center;
+        }
+        .controls-row label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+        }
+
+        .map-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            overflow-y: auto;
+            max-height: 380px;
+            padding-right: 4px;
+        }
+        .map-tile {
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+        }
+        .map-tile:hover { transform: scale(1.03); opacity: 0.9; }
+        .map-tile.up { background: var(--success-bg); border-color: rgba(34,197,94,0.3); }
+        .map-tile.down { background: var(--error-bg); border-color: rgba(239,68,68,0.3); }
+        .map-tile .map-ticker { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+        .map-tile.up .map-ticker { color: var(--success); }
+        .map-tile.down .map-ticker { color: var(--error); }
+        .map-tile .map-vol { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+        .map-tile .map-change { font-size: 14px; font-weight: 700; }
+        .map-tile.up .map-change { color: var(--success); }
+        .map-tile.down .map-change { color: var(--error); }
+        .map-loading {
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .top-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow-y: auto;
+            max-height: 380px;
+            padding-right: 4px;
+        }
+        .top-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s;
+            flex-shrink: 0;
+        }
+        .top-item:hover { transform: scale(1.02); opacity: 0.9; }
+        .top-item.gainer { background: var(--success-bg); border-color: rgba(34,197,94,0.3); }
+        .top-item.loser { background: var(--error-bg); border-color: rgba(239,68,68,0.3); }
+        .top-item .top-ticker { font-size: 13px; font-weight: 700; min-width: 50px; }
+        .top-item.gainer .top-ticker { color: var(--success); }
+        .top-item.loser .top-ticker { color: var(--error); }
+        .top-item .top-price { font-size: 13px; color: var(--text); min-width: 65px; text-align: right; }
+        .top-item .top-change { font-size: 13px; font-weight: 700; min-width: 55px; text-align: right; }
+        .top-item.gainer .top-change { color: var(--success); }
+        .top-item.loser .top-change { color: var(--error); }
+        .top-item .top-name {
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Блок "Резкое изменение цены" */
+        .spike-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow-y: auto;
+            max-height: 480px;
+            padding-right: 4px;
+        }
+        .spike-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--elevated);
+            cursor: pointer;
+            transition: transform 0.15s, opacity 0.15s, background 0.15s;
+            flex-shrink: 0;
+        }
+        .spike-item:hover { transform: scale(1.02); opacity: 0.95; }
+
+        /* Зелёная строка — close >= open */
+        .spike-item.bull {
+            border-color: rgba(34,197,94,0.35);
+            background: var(--success-bg);
+        }
+        .spike-item.bull:hover { background: rgba(34,197,94,0.22); }
+        .spike-item.bull .spike-ticker,
+        .spike-item.bull .spike-change { color: var(--success); }
+
+        /* Красная строка — close < open */
+        .spike-item.bear {
+            border-color: rgba(239,68,68,0.35);
+            background: var(--error-bg);
+        }
+        .spike-item.bear:hover { background: rgba(239,68,68,0.22); }
+        .spike-item.bear .spike-ticker,
+        .spike-item.bear .spike-change { color: var(--error); }
+
+        .spike-item .spike-ticker {
+            font-size: 13px;
+            font-weight: 700;
+            min-width: 55px;
+        }
+        .spike-item .spike-name {
+            flex: 1;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+        .spike-item .spike-time {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+            min-width: 88px;
+            text-align: right;
+        }
+        .spike-item .spike-prices {
+            font-size: 10px;
+            color: var(--text-secondary);
+            min-width: 110px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .spike-item .spike-change {
+            font-size: 14px;
+            font-weight: 700;
+            min-width: 64px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .spike-summary {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            text-align: center;
+            min-height: 14px;
+        }
+
+        .chart-placeholder {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 240px;
+        }
+
+        /* Экспорт данных */
+        .export-info {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: var(--elevated);
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        .export-info .row-line {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+        .export-info .row-line:last-child { margin-bottom: 0; }
+        .export-info .lbl {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            min-width: 70px;
+        }
+        .export-info .val { font-weight: 600; }
+        .export-empty {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        .export-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .export-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .export-field label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+        }
+        .export-field input[type="date"],
+        .export-field select {
+            width: 100%;
+            min-width: 0;
+            font-size: 13px;
+            padding: 8px 10px;
+        }
+        .export-field .date-row {
+            display: flex;
+            gap: 8px;
+        }
+        .export-field .date-row > * { flex: 1; min-width: 0; }
+        .export-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .export-actions button { flex: 1; }
+
+        .drop-indicator {
+            position: fixed;
+            width: 3px;
+            background: var(--magnet);
+            border-radius: 2px;
+            pointer-events: none;
+            z-index: 9999;
+            box-shadow: 0 0 8px var(--magnet);
+        }
+        .drop-indicator.hidden { display: none; }
+
+        @media (max-width: 1200px) {
+            .layout { flex-direction: column; }
+            .card { width: 100% !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="auto-badge" id="autoBadge" title="Автообновление раз в минуту">
+            <span class="dot"></span>
+            <span id="autoBadgeText">Автообновление: вкл</span>
+        </div>
+        <button class="btn-secondary" id="resetLayoutBtn">Сбросить раскладку</button>
+    </div>
+
+    <div class="layout" id="layout">
+        <!-- Карточка: поиск -->
+        <div class="card" id="cardSearch" data-card-id="search" style="width: 380px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Поиск и список</span>
+            </div>
+
+            <h1>Быстрый просмотр тикера</h1>
+            <div class="subtitle">Выберите режим торгов, введите тикер и добавьте в список</div>
+
+            <div class="row">
+                <select id="boardSelect">
+                    <option value="stock/shares/TQBR">TQBR — Акции (основной)</option>
+                    <option value="stock/shares/TQTF">TQTF — ETF</option>
+                    <option value="stock/shares/TQTD">TQTD — Иностранные акции</option>
+                    <option value="stock/shares/TQIR">TQIR — Акции РЕПО</option>
+                    <option value="stock/bonds/TQCB">TQCB — Облигации корп.</option>
+                    <option value="stock/bonds/TQOB">TQOB — ОФЗ</option>
+                    <option value="stock/bonds/TQDB">TQDB — Облигации РЕПО</option>
+                    <option value="currency/selt/CETS">CETS — Валютный рынок</option>
+                    <option value="futures/forts/SPBFUT">SPBFUT — Срочный рынок</option>
+                </select>
+                <input id="tickerInput" type="text" placeholder="Тикер, например AFLT" autocomplete="off">
+                <button id="addBtn">Добавить</button>
+            </div>
+
+            <div class="loading" id="loading"><span class="spinner"></span>Загружаем данные с Мосбиржи…</div>
+            <div class="error" id="errorBox"></div>
+
+            <div class="list-section" id="listSection">
+                <div class="list-header">
+                    <span class="list-title">Список инструментов</span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn-secondary" id="refreshBtn" style="display:none;">Обновить все</button>
+                        <button class="btn-danger" id="clearBtn" style="display:none;">Очистить</button>
+                    </div>
+                </div>
+                <div class="instrument-list" id="instrumentList">
+                    <div class="empty-state">Список пуст. Добавьте инструмент выше.</div>
+                </div>
+            </div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: график -->
+        <div class="card" id="cardChart" data-card-id="chart" style="width: 600px; min-height: 500px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">График</span>
+            </div>
+
+            <div id="detailBox" class="detail-wrap hidden">
+                <div class="params-row">
+                    <div class="param" style="flex: 2;">
+                        <div class="param-label">Название</div>
+                        <div class="param-name" id="resName"></div>
+                        <div class="param-board" id="resBoard"></div>
+                    </div>
+                    <div class="param">
+                        <div class="param-label">Цена</div>
+                        <div class="param-value" id="resPrice"></div>
+                    </div>
+                    <div class="param">
+                        <div class="param-label">Изменение</div>
+                        <div class="param-value" id="resChange"></div>
+                    </div>
+                    <div class="param hidden" id="couponBox">
+                        <div class="param-label">Купон</div>
+                        <div class="param-value" id="resCoupon"></div>
+                    </div>
+                </div>
+
+                <div class="chart-wrap">
+                    <div class="chart-header">
+                        <div class="chart-title">График торгов</div>
+                        <div class="chart-controls">
+                            <input id="dateFromInput" type="date" min="2010-01-01" title="Начальная дата (пусто — текущий день)">
+                            <select id="intervalSelect" title="Интервал свечей">
+                                <option value="10">10М</option>
+                                <option value="60">1Ч</option>
+                                <option value="24">1Д</option>
+                                <option value="7">1Н</option>
+                            </select>
+                            <button id="resetPeriodBtn" class="btn-secondary">Сбросить</button>
+                        </div>
+                    </div>
+                    <div class="canvas-wrap" id="canvasWrap">
+                        <canvas id="chartCanvas"></canvas>
+                    </div>
+                    <div class="chart-info" id="chartInfo"></div>
+                </div>
+            </div>
+
+            <div id="chartPlaceholder" class="chart-placeholder">
+                Выберите инструмент из списка, чтобы увидеть график
+            </div>
+
+            <div class="footer">
+                Источник: ИСС Московской биржи. Данные предоставляются с задержкой и только для ознакомления.
+            </div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: карта рынка -->
+        <div class="card" id="cardMap" data-card-id="map" style="width: 320px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Карта рынка</span>
+            </div>
+
+            <div class="controls-row">
+                <select id="mapBoard" title="Режим торгов">
+                    <option value="stock/shares/TQBR">TQBR</option>
+                    <option value="stock/shares/TQTF">TQTF</option>
+                    <option value="stock/shares/TQTD">TQTD</option>
+                    <option value="stock/shares/TQIR">TQIR</option>
+                    <option value="stock/bonds/TQCB">TQCB</option>
+                    <option value="stock/bonds/TQOB">TQOB</option>
+                    <option value="stock/bonds/TQDB">TQDB</option>
+                    <option value="currency/selt/CETS">CETS</option>
+                    <option value="futures/forts/SPBFUT">SPBFUT</option>
+                </select>
+                <label title="Количество инструментов (1–100)">Кол-во</label>
+                <input id="mapCount" type="number" min="1" max="100" value="5">
+            </div>
+
+            <div class="map-loading" id="mapLoading"><span class="spinner"></span>Загрузка…</div>
+            <div class="map-grid" id="mapGrid" style="display:none;"></div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: топ роста -->
+        <div class="card" id="cardGainers" data-card-id="gainers" style="width: 320px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Топ по росту</span>
+            </div>
+
+            <div class="controls-row">
+                <select id="gainersBoard" title="Режим торгов">
+                    <option value="stock/shares/TQBR">TQBR</option>
+                    <option value="stock/shares/TQTF">TQTF</option>
+                    <option value="stock/shares/TQTD">TQTD</option>
+                    <option value="stock/shares/TQIR">TQIR</option>
+                    <option value="stock/bonds/TQCB">TQCB</option>
+                    <option value="stock/bonds/TQOB">TQOB</option>
+                    <option value="stock/bonds/TQDB">TQDB</option>
+                    <option value="currency/selt/CETS">CETS</option>
+                    <option value="futures/forts/SPBFUT">SPBFUT</option>
+                </select>
+                <label title="Количество инструментов (1–100)">Кол-во</label>
+                <input id="gainersCount" type="number" min="1" max="100" value="5">
+            </div>
+
+            <div class="map-loading" id="gainersLoading"><span class="spinner"></span>Загрузка…</div>
+            <div class="top-list" id="gainersList" style="display:none;"></div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: топ падения -->
+        <div class="card" id="cardLosers" data-card-id="losers" style="width: 320px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Топ по снижению</span>
+            </div>
+
+            <div class="controls-row">
+                <select id="losersBoard" title="Режим торгов">
+                    <option value="stock/shares/TQBR">TQBR</option>
+                    <option value="stock/shares/TQTF">TQTF</option>
+                    <option value="stock/shares/TQTD">TQTD</option>
+                    <option value="stock/shares/TQIR">TQIR</option>
+                    <option value="stock/bonds/TQCB">TQCB</option>
+                    <option value="stock/bonds/TQOB">TQOB</option>
+                    <option value="stock/bonds/TQDB">TQDB</option>
+                    <option value="currency/selt/CETS">CETS</option>
+                    <option value="futures/forts/SPBFUT">SPBFUT</option>
+                </select>
+                <label title="Количество инструментов (1–100)">Кол-во</label>
+                <input id="losersCount" type="number" min="1" max="100" value="5">
+            </div>
+
+            <div class="map-loading" id="losersLoading"><span class="spinner"></span>Загрузка…</div>
+            <div class="top-list" id="losersList" style="display:none;"></div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: резкое изменение цены -->
+        <div class="card" id="cardSpikes" data-card-id="spikes" style="width: 520px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Резкое изменение цены</span>
+            </div>
+
+            <div class="controls-row">
+                <select id="spikesBoard" title="Режим торгов">
+                    <option value="stock/shares/TQBR">TQBR</option>
+                    <option value="stock/shares/TQTF">TQTF</option>
+                    <option value="stock/shares/TQTD">TQTD</option>
+                    <option value="stock/shares/TQIR">TQIR</option>
+                    <option value="stock/bonds/TQCB">TQCB</option>
+                    <option value="stock/bonds/TQOB">TQOB</option>
+                    <option value="stock/bonds/TQDB">TQDB</option>
+                    <option value="currency/selt/CETS">CETS</option>
+                    <option value="futures/forts/SPBFUT">SPBFUT</option>
+                </select>
+                <label title="Количество инструментов (1–100)">Кол-во</label>
+                <input id="spikesCount" type="number" min="1" max="100" value="10">
+                <label title="Порог изменения за 10 мин свечу, %">Порог, %</label>
+                <input id="spikesThreshold" type="number" min="0.1" max="100" step="0.1" value="1">
+                <button id="spikesRefreshBtn" class="btn-secondary">Обновить</button>
+            </div>
+
+            <div class="map-loading" id="spikesLoading" style="display:none;"><span class="spinner"></span>Сканируем рынок…</div>
+            <div class="spike-list" id="spikesList" style="display:none;"></div>
+            <div class="spike-summary" id="spikesSummary"></div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+
+        <!-- Карточка: экспорт данных -->
+        <div class="card" id="cardExport" data-card-id="export" style="width: 380px;">
+            <div class="card-handle" data-drag="true">
+                <span class="grip">⠿</span>
+                <span class="handle-title">Экспорт данных</span>
+            </div>
+
+            <div class="export-info" id="exportInstrumentBox">
+                <div class="row-line">
+                    <span class="lbl">Инструмент</span>
+                    <span class="val export-empty" id="exportInstrument">Выберите инструмент в списке</span>
+                </div>
+            </div>
+
+            <div class="export-form">
+                <div class="export-field">
+                    <label>Период выгрузки</label>
+                    <div class="date-row">
+                        <input id="exportDateFrom" type="date" min="2010-01-01" title="Дата начала">
+                        <input id="exportDateTo" type="date" min="2010-01-01" title="Дата окончания">
+                    </div>
+                </div>
+
+                <div class="export-field">
+                    <label>Периодичность</label>
+                    <select id="exportInterval">
+                        <option value="10">10 минут</option>
+                        <option value="60">1 час</option>
+                        <option value="24">1 день</option>
+                        <option value="7">1 неделя</option>
+                    </select>
+                </div>
+
+                <div class="export-actions">
+                    <button id="exportBtn">Получить файл</button>
+                </div>
+
+                <div class="loading" id="exportLoading" style="display:none;margin-top:0;">
+                    <span class="spinner"></span><span id="exportLoadingText">Формируем файл…</span>
+                </div>
+                <div class="error" id="exportError" style="margin-top:0;"></div>
+                <div class="success" id="exportSuccess" style="margin-top:0;"></div>
+            </div>
+
+            <div class="card-resize-handle" data-resize="true"></div>
+        </div>
+    </div>
+
+    <div class="drop-indicator hidden" id="dropIndicator"></div>
+
+    <script>
+        let instruments = [];
+        let activeIndex = -1;
+        let currentCandles = [];
+        let currentType = 'shares';
+        let chartInterval = 10;
+        let chartFromDate = null;
+        let dateChangeTimer = null;
+        let hoverState = null;
+
+        const mapState = { board: 'stock/shares/TQBR', count: 5, items: [] };
+        const gainersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
+        const losersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
+        const spikesState = { board: 'stock/shares/TQBR', count: 10, threshold: 1, items: [] };
+
+        const INTERVAL_MAX_DAYS = { 10: 2, 60: 365, 24: 3650, 7: 3650 };
+
+        const STORAGE_KEY = 'moex_instruments_v1';
+        const STORAGE_ACTIVE_KEY = 'moex_active_index_v1';
+        const STORAGE_LAYOUT_KEY = 'moex_layout_v4';
+        const STORAGE_BLOCKS_KEY = 'moex_blocks_v3';
+        const STORAGE_EXPORT_KEY = 'moex_export_v1';
+
+        const AUTO_REFRESH_INTERVAL = 60 * 1000;
+        const SPIKES_AUTO_REFRESH_INTERVAL = 10 * 60 * 1000;
+
+        const DEFAULT_LAYOUT = {
+            order: ['search', 'chart', 'spikes', 'export', 'map', 'gainers', 'losers'],
+            sizes: {
+                search:  { width: 380, height: 600 },
+                chart:   { width: 640, height: 600 },
+                spikes:  { width: 520, height: 420 },
+                export:  { width: 380, height: 420 },
+                map:     { width: 320, height: 500 },
+                gainers: { width: 320, height: 400 },
+                losers:  { width: 320, height: 400 }
+            }
+        };
+
+        // === Экспорт: состояние ===
+        const exportState = {
+            dateFrom: null,
+            dateTo: null,
+            interval: 10
+        };
+
+        function saveExportState() {
+            try {
+                localStorage.setItem(STORAGE_EXPORT_KEY, JSON.stringify({
+                    dateFrom: exportState.dateFrom,
+                    dateTo: exportState.dateTo,
+                    interval: exportState.interval
+                }));
+            } catch (e) {}
+        }
+
+        function loadExportState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_EXPORT_KEY);
+                if (!raw) return;
+                const d = JSON.parse(raw);
+                if (d.dateFrom) exportState.dateFrom = d.dateFrom;
+                if (d.dateTo) exportState.dateTo = d.dateTo;
+                if ([10, 60, 24, 7].includes(d.interval)) exportState.interval = d.interval;
+            } catch (e) {}
+        }
+
+        // === Блоки карты/топов/спайков ===
+        function saveBlocks() {
+            try {
+                localStorage.setItem(STORAGE_BLOCKS_KEY, JSON.stringify({
+                    map: { board: mapState.board, count: mapState.count },
+                    gainers: { board: gainersState.board, count: gainersState.count },
+                    losers: { board: losersState.board, count: losersState.count },
+                    spikes: { board: spikesState.board, count: spikesState.count, threshold: spikesState.threshold }
+                }));
+            } catch (e) {}
+        }
+
+        function loadBlocks() {
+            try {
+                const raw = localStorage.getItem(STORAGE_BLOCKS_KEY);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                if (data.map) {
+                    mapState.board = data.map.board || mapState.board;
+                    mapState.count = clampCount(data.map.count, 5);
+                }
+                if (data.gainers) {
+                    gainersState.board = data.gainers.board || gainersState.board;
+                    gainersState.count = clampCount(data.gainers.count, 5);
+                }
+                if (data.losers) {
+                    losersState.board = data.losers.board || losersState.board;
+                    losersState.count = clampCount(data.losers.count, 5);
+                }
+                if (data.spikes) {
+                    spikesState.board = data.spikes.board || spikesState.board;
+                    spikesState.count = clampCount(data.spikes.count, 10);
+                    spikesState.threshold = clampThreshold(data.spikes.threshold, 1);
+                }
+            } catch (e) {}
+        }
+
+        function clampCount(v, def) {
+            const n = parseInt(v, 10);
+            if (!Number.isFinite(n)) return def;
+            if (n < 1) return 1;
+            if (n > 100) return 100;
+            return n;
+        }
+
+        function clampThreshold(v, def) {
+            const n = parseFloat(v);
+            if (!Number.isFinite(n)) return def;
+            if (n < 0.1) return 0.1;
+            if (n > 100) return 100;
+            return n;
+        }
+
+        // === Раскладка ===
+        function saveLayout() {
+            try {
+                const order = Array.from(document.querySelectorAll('.layout .card'))
+                    .map(c => c.dataset.cardId);
+                const sizes = {};
+                document.querySelectorAll('.layout .card').forEach(c => {
+                    const id = c.dataset.cardId;
+                    const hasInlineW = !!c.style.width;
+                    const hasInlineH = !!c.style.height;
+                    sizes[id] = {
+                        width: hasInlineW ? c.offsetWidth : null,
+                        height: hasInlineH ? c.offsetHeight : null
+                    };
+                });
+                localStorage.setItem(STORAGE_LAYOUT_KEY, JSON.stringify({ order, sizes }));
+            } catch (e) {}
+        }
+
+        function loadLayout() {
+            try {
+                const raw = localStorage.getItem(STORAGE_LAYOUT_KEY);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (!data || !Array.isArray(data.order)) return null;
+                return data;
+            } catch (e) { return null; }
+        }
+
+        function applyLayout(data) {
+            const layout = document.getElementById('layout');
+            if (!layout) return;
+
+            const cards = {};
+            layout.querySelectorAll('.card').forEach(c => {
+                cards[c.dataset.cardId] = c;
+            });
+
+            const savedOrder = (data && Array.isArray(data.order)) ? data.order : [];
+            const savedSizes = (data && data.sizes) ? data.sizes : {};
+
+            const order = savedOrder.length > 0 ? savedOrder : DEFAULT_LAYOUT.order;
+            const sizes = {};
+            Object.keys(DEFAULT_LAYOUT.sizes).forEach(id => {
+                sizes[id] = Object.assign({}, DEFAULT_LAYOUT.sizes[id], savedSizes[id] || {});
+            });
+
+            const seen = new Set();
+            order.forEach(id => {
+                if (cards[id] && !seen.has(id)) {
+                    layout.appendChild(cards[id]);
+                    seen.add(id);
+                }
+            });
+            Object.keys(cards).forEach(id => {
+                if (!seen.has(id)) layout.appendChild(cards[id]);
+            });
+
+            Object.keys(cards).forEach(id => {
+                const c = cards[id];
+                const s = sizes[id];
+                if (!s) return;
+                if (s.width) c.style.width = s.width + 'px';
+                if (s.height) c.style.height = s.height + 'px';
+                else c.style.height = '';
+            });
+        }
+
+        function resetLayout() {
+            try { localStorage.removeItem(STORAGE_LAYOUT_KEY); } catch (e) {}
+            document.querySelectorAll('.layout .card').forEach(c => {
+                c.style.width = '';
+                c.style.height = '';
+            });
+            applyLayout(DEFAULT_LAYOUT);
+            saveLayout();
+            requestAnimationFrame(() => {
+                if (!document.getElementById('detailBox').classList.contains('hidden')) {
+                    drawCandles();
+                }
+            });
+        }
+
+        // === Drag & Drop на Pointer Events ===
+        let dragState = null;
+
+        function initDragDrop() {
+            const layout = document.getElementById('layout');
+            const indicator = document.getElementById('dropIndicator');
+
+            layout.addEventListener('pointerdown', (e) => {
+                if (e.button !== 0) return;
+                const handle = e.target.closest('[data-drag="true"]');
+                if (!handle) return;
+                const card = handle.closest('.card');
+                if (!card) return;
+
+                e.preventDefault();
+                dragState = {
+                    card,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    started: false,
+                    pending: null,
+                    pointerId: e.pointerId
+                };
+                handle.classList.add('active');
+                try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+            });
+
+            document.addEventListener('pointermove', (e) => {
+                if (!dragState) return;
+                const dx = e.clientX - dragState.startX;
+                const dy = e.clientY - dragState.startY;
+
+                if (!dragState.started) {
+                    if (Math.hypot(dx, dy) < 5) return;
+                    dragState.started = true;
+                    dragState.card.classList.add('dragging');
+                    document.body.style.userSelect = 'none';
+                }
+
+                const mouseX = e.clientX;
+                const mouseY = e.clientY;
+
+                const cards = Array.from(layout.querySelectorAll('.card')).filter(c => c !== dragState.card);
+
+                let best = null;
+                let bestDist = Infinity;
+
+                cards.forEach(c => {
+                    const r = c.getBoundingClientRect();
+                    const candidates = [
+                        { pos: 'before', ref: c, x: r.left, y: r.top + r.height / 2 },
+                        { pos: 'after',  ref: c, x: r.right, y: r.top + r.height / 2 },
+                        { pos: 'above',  ref: c, x: r.left + r.width / 2, y: r.top },
+                        { pos: 'below',  ref: c, x: r.left + r.width / 2, y: r.bottom }
+                    ];
+                    candidates.forEach(cand => {
+                        const dist = Math.hypot(mouseX - cand.x, mouseY - cand.y);
+                        if (dist < bestDist) { bestDist = dist; best = cand; }
+                    });
+                });
+
+                if (best && bestDist < Math.max(best.ref.offsetWidth, best.ref.offsetHeight) * 0.6) {
+                    document.querySelectorAll('.card.drop-target').forEach(c => c.classList.remove('drop-target'));
+                    best.ref.classList.add('drop-target');
+
+                    const r = best.ref.getBoundingClientRect();
+                    if (best.pos === 'before') {
+                        indicator.style.left = (r.left - 4) + 'px';
+                        indicator.style.top = r.top + 'px';
+                        indicator.style.width = '3px';
+                        indicator.style.height = r.height + 'px';
+                    } else if (best.pos === 'after') {
+                        indicator.style.left = (r.right + 1) + 'px';
+                        indicator.style.top = r.top + 'px';
+                        indicator.style.width = '3px';
+                        indicator.style.height = r.height + 'px';
+                    } else if (best.pos === 'above') {
+                        indicator.style.left = r.left + 'px';
+                        indicator.style.top = (r.top - 4) + 'px';
+                        indicator.style.width = r.width + 'px';
+                        indicator.style.height = '3px';
+                    } else {
+                        indicator.style.left = r.left + 'px';
+                        indicator.style.top = (r.bottom + 1) + 'px';
+                        indicator.style.width = r.width + 'px';
+                        indicator.style.height = '3px';
+                    }
+                    indicator.classList.remove('hidden');
+                    dragState.pending = best;
+                } else {
+                    indicator.classList.add('hidden');
+                    dragState.pending = null;
+                }
+            });
+
+            document.addEventListener('pointerup', (e) => {
+                if (!dragState) return;
+                const handle = dragState.card.querySelector('[data-drag="true"]');
+                if (handle) handle.classList.remove('active');
+                try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+
+                if (dragState.started && dragState.pending) {
+                    const { card, pending } = dragState;
+                    const ref = pending.ref;
+                    if (pending.pos === 'before' || pending.pos === 'above') {
+                        layout.insertBefore(card, ref);
+                    } else {
+                        if (ref.nextSibling) layout.insertBefore(card, ref.nextSibling);
+                        else layout.appendChild(card);
+                    }
+                    saveLayout();
+                    requestAnimationFrame(() => {
+                        if (!document.getElementById('detailBox').classList.contains('hidden')) {
+                            drawCandles();
+                        }
+                    });
+                }
+
+                if (dragState.card) dragState.card.classList.remove('dragging');
+                document.querySelectorAll('.card.drop-target').forEach(c => c.classList.remove('drop-target'));
+                indicator.classList.add('hidden');
+                document.body.style.userSelect = '';
+                dragState = null;
+            });
+
+            document.addEventListener('pointercancel', () => {
+                if (!dragState) return;
+                const handle = dragState.card.querySelector('[data-drag="true"]');
+                if (handle) handle.classList.remove('active');
+                if (dragState.card) dragState.card.classList.remove('dragging');
+                document.querySelectorAll('.card.drop-target').forEach(c => c.classList.remove('drop-target'));
+                indicator.classList.add('hidden');
+                document.body.style.userSelect = '';
+                dragState = null;
+            });
+        }
+
+        // === Ресайз карточек ===
+        function initCardResize() {
+            const layout = document.getElementById('layout');
+            let resizeState = null;
+
+            layout.addEventListener('mousedown', (e) => {
+                const handle = e.target.closest('[data-resize="true"]');
+                if (!handle) return;
+                const card = handle.closest('.card');
+                if (!card) return;
+                e.preventDefault();
+                resizeState = {
+                    card,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    startW: card.offsetWidth,
+                    startH: card.offsetHeight
+                };
+                card.classList.add('resizing');
+                document.body.style.userSelect = 'none';
+                document.body.style.cursor = 'nwse-resize';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!resizeState) return;
+                const { card, startX, startY, startW, startH } = resizeState;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                card.style.width = Math.max(260, startW + dx) + 'px';
+                card.style.height = Math.max(120, startH + dy) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!resizeState) return;
+                resizeState.card.classList.remove('resizing');
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+                resizeState = null;
+                saveLayout();
+                requestAnimationFrame(() => {
+                    if (!document.getElementById('detailBox').classList.contains('hidden')) {
+                        drawCandles();
+                    }
+                });
+            });
+        }
+
+        function initCanvasObserver() {
+            const wrap = document.getElementById('canvasWrap');
+            if (!wrap || !window.ResizeObserver) return;
+            const ro = new ResizeObserver(() => {
+                if (!document.getElementById('detailBox').classList.contains('hidden')) {
+                    drawCandles();
+                }
+            });
+            ro.observe(wrap);
+        }
+
+        // === Утилиты ===
+        function getTodayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        function addDaysIso(isoDate, deltaDays) {
+            const d = new Date(isoDate + 'T00:00:00');
+            d.setDate(d.getDate() + deltaDays);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        function formatRuDate(isoStr) {
+            if (!isoStr) return '';
+            const [y, m, d] = isoStr.split('-');
+            return `${d}.${m}.${y}`;
+        }
+        function formatRuDateTime(isoStr) {
+            if (!isoStr) return '';
+            const datePart = isoStr.substring(0, 10);
+            const timePart = isoStr.length >= 16 ? isoStr.substring(11, 16) : '';
+            const [y, m, d] = datePart.split('-');
+            return `${d}.${m}.${y} ${timePart}`.trim();
+        }
+        function getSelectedInterval() {
+            const v = parseInt(document.getElementById('intervalSelect').value, 10);
+            return Number.isFinite(v) ? v : 10;
+        }
+        function intervalLabel(iv) {
+            switch (iv) {
+                case 10: return '10 мин';
+                case 60: return '1 час';
+                case 24: return '1 день';
+                case 7: return '1 неделя';
+                default: return iv + ' мин';
+            }
+        }
+        function getVal(row, cols, name) {
+            const idx = cols.indexOf(name);
+            return idx >= 0 ? row[idx] : null;
+        }
+        function fmtNum(n, digits) {
+            if (n === null || n === undefined || n === '') return '—';
+            const d = digits !== undefined ? digits : 2;
+            return Number(n).toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d });
+        }
+        function fmtVol(n) {
+            if (n === null || n === undefined || n === '') return '—';
+            const v = Number(n);
+            if (v >= 1e9) return (v / 1e9).toFixed(2) + ' млрд ₽';
+            if (v >= 1e6) return (v / 1e6).toFixed(1) + ' млн ₽';
+            if (v >= 1e3) return (v / 1e3).toFixed(1) + ' тыс ₽';
+            return v.toFixed(0) + ' ₽';
+        }
+        function getPriceSuffix(market) {
+            if (market === 'bonds') return '%';
+            if (market === 'currency') return '';
+            if (market === 'forts') return '';
+            return '₽';
+        }
+
+        // === Список инструментов ===
+        function renderList() {
+            const listEl = document.getElementById('instrumentList');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            if (instruments.length === 0) {
+                listEl.innerHTML = '<div class="empty-state">Список пуст. Добавьте инструмент выше.</div>';
+                refreshBtn.style.display = 'none';
+                if (clearBtn) clearBtn.style.display = 'none';
+                document.getElementById('detailBox').classList.add('hidden');
+                document.getElementById('chartPlaceholder').style.display = 'flex';
+                updateExportInstrument();
+                return;
+            }
+            refreshBtn.style.display = 'inline-block';
+            if (clearBtn) clearBtn.style.display = 'inline-block';
+            listEl.innerHTML = '';
+            instruments.forEach((inst, idx) => {
+                const item = document.createElement('div');
+                item.className = 'instrument-item' + (idx === activeIndex ? ' active' : '');
+                item.dataset.index = idx;
+                const changeColor = inst.changePct > 0 ? 'var(--success)' : (inst.changePct < 0 ? 'var(--error)' : 'var(--text)');
+                const changeSign = inst.changePct > 0 ? '+' : '';
+                const suffix = getPriceSuffix(inst.market);
+                item.innerHTML = `
+                    <span class="ticker">${inst.ticker}</span>
+                    <span class="board">${inst.board}</span>
+                    <span class="name">${inst.name}</span>
+                    <span class="price">${fmtNum(inst.last, 2)}${suffix}</span>
+                    <span class="change" style="color:${changeColor}">${changeSign}${fmtNum(inst.changePct, 2)}%</span>
+                    <div class="actions">
+                        <button class="btn-danger" data-action="remove" data-index="${idx}">×</button>
+                    </div>
+                `;
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('[data-action="remove"]')) return;
+                    setActive(idx);
+                });
+                listEl.appendChild(item);
+            });
+            updateExportInstrument();
+        }
+
+        function setActive(idx) {
+            activeIndex = idx;
+            saveInstruments();
+            renderList();
+            if (idx >= 0 && idx < instruments.length) showDetail(instruments[idx]);
+        }
+
+        async function showDetail(inst) {
+            currentType = inst.market;
+            document.getElementById('resName').textContent = inst.name;
+            document.getElementById('resBoard').textContent = inst.board;
+            const suffix = getPriceSuffix(inst.market);
+            document.getElementById('resPrice').textContent = fmtNum(inst.last, 2) + suffix;
+
+            const changeEl = document.getElementById('resChange');
+            if (inst.changePct !== null && inst.changePct !== '') {
+                const v = Number(inst.changePct);
+                const sign = v > 0 ? '+' : '';
+                changeEl.textContent = sign + fmtNum(v, 2) + '%';
+                changeEl.style.color = v > 0 ? 'var(--success)' : (v < 0 ? 'var(--error)' : 'var(--text)');
+            } else {
+                changeEl.textContent = '—';
+                changeEl.style.color = 'var(--text)';
+            }
+
+            const couponBox = document.getElementById('couponBox');
+            if (inst.market === 'bonds' && inst.couponText) {
+                document.getElementById('resCoupon').textContent = inst.couponText;
+                couponBox.classList.remove('hidden');
+            } else {
+                couponBox.classList.add('hidden');
+            }
+
+            document.getElementById('detailBox').classList.remove('hidden');
+            document.getElementById('chartPlaceholder').style.display = 'none';
+
+            updateExportInstrument();
+            await loadCandlesForActive();
+        }
+
+        function updateExportInstrument() {
+            const el = document.getElementById('exportInstrument');
+            if (activeIndex >= 0 && activeIndex < instruments.length) {
+                const inst = instruments[activeIndex];
+                el.textContent = `${inst.ticker} · ${inst.board} · ${inst.name}`;
+                el.classList.remove('export-empty');
+            } else {
+                el.textContent = 'Выберите инструмент в списке';
+                el.classList.add('export-empty');
+            }
+        }
+
+        // === Экспорт данных ===
+        function initExportControls() {
+            const today = getTodayStr();
+            if (!exportState.dateFrom) exportState.dateFrom = addDaysIso(today, -30);
+            if (!exportState.dateTo) exportState.dateTo = today;
+
+            const fromEl = document.getElementById('exportDateFrom');
+            const toEl = document.getElementById('exportDateTo');
+            const ivEl = document.getElementById('exportInterval');
+
+            fromEl.value = exportState.dateFrom;
+            toEl.value = exportState.dateTo;
+            fromEl.max = today;
+            toEl.max = today;
+            ivEl.value = String(exportState.interval);
+
+            fromEl.addEventListener('change', () => {
+                let v = fromEl.value;
+                if (!v) { v = addDaysIso(today, -30); fromEl.value = v; }
+                if (v > today) { v = today; fromEl.value = v; }
+                if (toEl.value && v > toEl.value) {
+                    toEl.value = v;
+                    exportState.dateTo = v;
+                }
+                exportState.dateFrom = v;
+                saveExportState();
+            });
+            toEl.addEventListener('change', () => {
+                let v = toEl.value;
+                if (!v) { v = today; toEl.value = v; }
+                if (v > today) { v = today; toEl.value = v; }
+                if (fromEl.value && v < fromEl.value) {
+                    fromEl.value = v;
+                    exportState.dateFrom = v;
+                }
+                exportState.dateTo = v;
+                saveExportState();
+            });
+            ivEl.addEventListener('change', () => {
+                exportState.interval = parseInt(ivEl.value, 10) || 10;
+                saveExportState();
+            });
+
+            document.getElementById('exportBtn').addEventListener('click', exportCsv);
+        }
+
+        async function fetchAllCandles(inst, fromIso, tillIso, interval, onProgress) {
+            const all = [];
+            let start = 0;
+            const limit = 500;
+            const maxPages = 100;
+            let page = 0;
+            let lastStart = -1;
+            while (page < maxPages) {
+                if (start === lastStart) break;
+                lastStart = start;
+                page++;
+                const url = `https://iss.moex.com/iss/engines/${inst.engine}/markets/${inst.market}/boards/${inst.board}/securities/${encodeURIComponent(inst.ticker)}/candles.json`
+                    + `?from=${fromIso}&till=${tillIso}&interval=${interval}&start=${start}&iss.meta=off`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Ошибка сети: ' + res.status);
+                const data = await res.json();
+                const cd = data.candles;
+                if (!cd || !cd.data || cd.data.length === 0) break;
+
+                const cols = cd.columns;
+                const iOpen = cols.indexOf('open');
+                const iClose = cols.indexOf('close');
+                const iHigh = cols.indexOf('high');
+                const iLow = cols.indexOf('low');
+                const iBegin = cols.indexOf('begin');
+                const iValue = cols.indexOf('value');
+                const iVolume = cols.indexOf('volume');
+
+                for (const row of cd.data) {
+                    all.push({
+                        begin: row[iBegin],
+                        open: row[iOpen],
+                        high: row[iHigh],
+                        low: row[iLow],
+                        close: row[iClose],
+                        value: iValue >= 0 ? row[iValue] : '',
+                        volume: iVolume >= 0 ? row[iVolume] : ''
+                    });
+                }
+                if (onProgress) onProgress(all.length);
+
+                if (cd.data.length < limit) break;
+                start += cd.data.length;
+            }
+            return all;
+        }
+
+        function buildCsv(inst, interval, fromIso, tillIso, candles) {
+            const BOM = '\uFEFF';
+            const sep = ';';
+            const header = ['begin', 'open', 'high', 'low', 'close', 'value', 'volume'].join(sep);
+            const lines = [header];
+            for (const c of candles) {
+                lines.push([
+                    c.begin,
+                    c.open,
+                    c.high,
+                    c.low,
+                    c.close,
+                    c.value,
+                    c.volume
+                ].join(sep));
+            }
+            return BOM + lines.join('\r\n');
+        }
+
+        function defaultExportFilename(inst, interval, fromIso, tillIso) {
+            const iv = intervalLabel(interval).replace(/\s+/g, '');
+            return `${inst.ticker}_${inst.board}_${iv}_${fromIso}_${tillIso}.csv`;
+        }
+
+        async function saveCsvWithDialog(content, defaultName, mime) {
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: defaultName,
+                        types: [{
+                            description: 'CSV файл',
+                            accept: { 'text/csv': ['.csv'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    return { ok: true, method: 'fs-api' };
+                } catch (e) {
+                    if (e.name === 'AbortError') return { ok: false, method: 'aborted' };
+                }
+            }
+            const blob = new Blob([content], { type: mime || 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = defaultName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+            return { ok: true, method: 'download' };
+        }
+
+        async function exportCsv() {
+            const errorEl = document.getElementById('exportError');
+            const successEl = document.getElementById('exportSuccess');
+            const loadingEl = document.getElementById('exportLoading');
+            const loadingText = document.getElementById('exportLoadingText');
+            const btn = document.getElementById('exportBtn');
+
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+            loadingEl.style.display = 'none';
+
+            if (activeIndex < 0 || activeIndex >= instruments.length) {
+                errorEl.textContent = 'Сначала выберите инструмент в списке.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            const inst = instruments[activeIndex];
+
+            const fromIso = document.getElementById('exportDateFrom').value;
+            const tillIso = document.getElementById('exportDateTo').value;
+            const interval = parseInt(document.getElementById('exportInterval').value, 10) || 10;
+
+            if (!fromIso || !tillIso) {
+                errorEl.textContent = 'Укажите даты начала и окончания выгрузки.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (fromIso > tillIso) {
+                errorEl.textContent = 'Дата начала не может быть позже даты окончания.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            const today = getTodayStr();
+            if (tillIso > today) {
+                errorEl.textContent = 'Дата окончания не может быть в будущем.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            loadingEl.style.display = 'block';
+            loadingText.textContent = 'Формируем файл…';
+
+            try {
+                const candles = await fetchAllCandles(inst, fromIso, tillIso, interval, (n) => {
+                    loadingText.textContent = `Загружено свечей: ${n}…`;
+                });
+
+                if (candles.length === 0) {
+                    errorEl.textContent = 'За выбранный период и интервал данных нет. Попробуйте другой диапазон или периодичность.';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                const csv = buildCsv(inst, interval, fromIso, tillIso, candles);
+                const defaultName = defaultExportFilename(inst, interval, fromIso, tillIso);
+
+                const result = await saveCsvWithDialog(csv, defaultName, 'text/csv;charset=utf-8');
+
+                if (result.ok) {
+                    if (result.method === 'fs-api') {
+                        successEl.textContent = `Готово: ${candles.length} свечей сохранено в файл.`;
+                    } else {
+                        successEl.textContent = `Готово: ${candles.length} свечей. Файл загружен браузером (проверьте папку загрузок).`;
+                    }
+                    successEl.style.display = 'block';
+                } else if (result.method === 'aborted') {
+                    // отменено
+                }
+            } catch (e) {
+                errorEl.textContent = 'Не удалось выгрузить данные: ' + (e.message || 'ошибка сети');
+                errorEl.style.display = 'block';
+            } finally {
+                loadingEl.style.display = 'none';
+                btn.disabled = false;
+            }
+        }
+
+        // === Свечи для графика ===
+        async function loadCandlesForActive() {
+            const inst = instruments[activeIndex];
+            if (!inst) return;
+            const today = getTodayStr();
+            const iv = getSelectedInterval();
+            chartInterval = iv;
+            let fromIso, tillIso;
+            if (chartFromDate) { fromIso = chartFromDate; tillIso = today; }
+            else { fromIso = today; tillIso = today; }
+
+            currentCandles = [];
+            document.getElementById('chartInfo').textContent = 'Загрузка…';
+
+            try {
+                currentCandles = await fetchAllCandles(inst, fromIso, tillIso, iv);
+            } catch (e) { console.warn('Ошибка загрузки свечей:', e); }
+
+            if (currentCandles.length > 0) {
+                const fromLabel = chartFromDate ? formatRuDate(fromIso) : formatRuDate(today);
+                const toLabel = formatRuDate(tillIso);
+                document.getElementById('chartInfo').textContent =
+                    `${fromLabel} — ${toLabel} · ${intervalLabel(iv)} · ${currentCandles.length} свечей`;
+            } else {
+                document.getElementById('chartInfo').textContent = chartFromDate
+                    ? `Нет данных за период ${formatRuDate(fromIso)} — ${formatRuDate(tillIso)}`
+                    : 'Нет данных за текущий день';
+            }
+
+            hoverState = null;
+            requestAnimationFrame(() => requestAnimationFrame(drawCandles));
+        }
+
+        let lastChartLayout = null;
+
+        function drawCandles() {
+            const canvas = document.getElementById('chartCanvas');
+            const wrap = document.getElementById('canvasWrap');
+            if (!canvas || !wrap) return;
+            const ctx = canvas.getContext('2d');
+
+            const cssW = wrap.clientWidth;
+            const cssH = wrap.clientHeight;
+            if (cssW < 10 || cssH < 10) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const needResize = canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr);
+            if (needResize) {
+                canvas.width = Math.round(cssW * dpr);
+                canvas.height = Math.round(cssH * dpr);
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const W = cssW;
+            const H = cssH;
+            const pad = { top: 10, right: 70, bottom: 26, left: 10 };
+            const chartW = W - pad.left - pad.right;
+            const chartH = H - pad.top - pad.bottom;
+
+            ctx.clearRect(0, 0, W, H);
+
+            const candles = currentCandles;
+            if (!candles || candles.length === 0) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Нет данных за выбранный период', W / 2, H / 2);
+                lastChartLayout = null;
+                return;
+            }
+
+            let minP = Infinity, maxP = -Infinity;
+            for (const c of candles) {
+                if (c.low < minP) minP = c.low;
+                if (c.high > maxP) maxP = c.high;
+            }
+            const range = maxP - minP || 1;
+            const padding = range * 0.05;
+            minP -= padding; maxP += padding;
+            const scaleY = chartH / (maxP - minP);
+
+            const n = candles.length;
+            const gap = 2;
+            const slotW = chartW / n;
+            const candleW = Math.max(1, slotW - gap);
+
+            ctx.strokeStyle = 'rgba(148,163,184,0.10)';
+            ctx.lineWidth = 1;
+            const gridSteps = 6;
+            for (let i = 0; i <= gridSteps; i++) {
+                const y = pad.top + (chartH / gridSteps) * i;
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+                const price = maxP - ((maxP - minP) / gridSteps) * i;
+                ctx.fillStyle = '#64748b';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const suffix = currentType === 'bonds' ? '%' : '';
+                ctx.fillText(price.toFixed(2) + suffix, W - pad.right + 6, y);
+            }
+
+            if (n > 1) {
+                ctx.strokeStyle = 'rgba(148,163,184,0.18)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                let prevDay = null;
+                for (let i = 0; i < n; i++) {
+                    const day = candles[i].begin.substring(0, 10);
+                    if (prevDay !== null && day !== prevDay) {
+                        const x = pad.left + i * slotW;
+                        ctx.beginPath();
+                        ctx.moveTo(x, pad.top);
+                        ctx.lineTo(x, pad.top + chartH);
+                        ctx.stroke();
+                    }
+                    prevDay = day;
+                }
+                ctx.setLineDash([]);
+            }
+
+            for (let i = 0; i < n; i++) {
+                const c = candles[i];
+                const x = pad.left + i * slotW + (slotW - candleW) / 2;
+                const yOpen = pad.top + (maxP - c.open) * scaleY;
+                const yClose = pad.top + (maxP - c.close) * scaleY;
+                const yHigh = pad.top + (maxP - c.high) * scaleY;
+                const yLow = pad.top + (maxP - c.low) * scaleY;
+                const bullish = c.close >= c.open;
+                const color = bullish ? '#22c55e' : '#ef4444';
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x + candleW / 2, yHigh);
+                ctx.lineTo(x + candleW / 2, yLow);
+                ctx.stroke();
+                const bodyTop = Math.min(yOpen, yClose);
+                const bodyH = Math.max(1, Math.abs(yClose - yOpen));
+                ctx.fillStyle = color;
+                ctx.fillRect(x, bodyTop, candleW, bodyH);
+            }
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            const labelIndices = n <= 2 ? [0, n - 1] : [0, Math.floor(n / 2), n - 1];
+            const isDaily = chartInterval >= 24;
+            const firstDay = candles[0].begin.substring(0, 10);
+            const lastDay = candles[n - 1].begin.substring(0, 10);
+            const sameDay = firstDay === lastDay;
+            for (const idx of labelIndices) {
+                if (idx < 0 || idx >= n) continue;
+                const c = candles[idx];
+                const x = pad.left + idx * slotW + slotW / 2;
+                let label;
+                if (isDaily) {
+                    const [y, m, d] = c.begin.substring(0, 10).split('-');
+                    label = `${d}.${m}`;
+                } else {
+                    const date = c.begin.substring(8, 10) + '.' + c.begin.substring(5, 7);
+                    const time = c.begin.substring(11, 16);
+                    label = sameDay ? time : `${date} ${time}`;
+                }
+                ctx.fillText(label, x, H - pad.bottom + 6);
+            }
+
+            lastChartLayout = {
+                W, H, pad, chartW, chartH, minP, maxP, scaleY, n, slotW, candleW
+            };
+
+            if (hoverState && hoverState.index >= 0 && hoverState.index < n) {
+                drawCrosshair(ctx, lastChartLayout, hoverState);
+            }
+        }
+
+        function drawCrosshair(ctx, L, hover) {
+            const { pad, chartW, chartH, minP, maxP, scaleY, n, slotW } = L;
+            const idx = hover.index;
+            if (idx < 0 || idx >= n) return;
+            const c = currentCandles[idx];
+
+            const xCenter = pad.left + idx * slotW + slotW / 2;
+            const mouseY = hover.y;
+            const clampedY = Math.max(pad.top, Math.min(pad.top + chartH, mouseY));
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(148,163,184,0.55)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+
+            ctx.beginPath();
+            ctx.moveTo(Math.round(xCenter) + 0.5, pad.top);
+            ctx.lineTo(Math.round(xCenter) + 0.5, pad.top + chartH);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(pad.left, Math.round(clampedY) + 0.5);
+            ctx.lineTo(pad.left + chartW, Math.round(clampedY) + 0.5);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+
+            const priceAtCursor = maxP - (clampedY - pad.top) / scaleY;
+            const suffix = currentType === 'bonds' ? '%' : '';
+            const priceText = priceAtCursor.toFixed(2) + suffix;
+            ctx.font = '11px sans-serif';
+            const priceTextW = ctx.measureText(priceText).width;
+            const priceBoxW = Math.max(56, priceTextW + 12);
+            const priceBoxX = L.W - pad.right + 1;
+            const priceBoxY = clampedY - 9;
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(priceBoxX, priceBoxY, priceBoxW, 18);
+            ctx.strokeStyle = 'rgba(96,165,250,0.6)';
+            ctx.strokeRect(priceBoxX + 0.5, priceBoxY + 0.5, priceBoxW - 1, 17);
+            ctx.fillStyle = '#f1f5f9';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(priceText, priceBoxX + 6, clampedY);
+
+            const isDaily = chartInterval >= 24;
+            let timeText;
+            if (isDaily) {
+                timeText = formatRuDate(c.begin.substring(0, 10));
+            } else {
+                timeText = formatRuDateTime(c.begin);
+            }
+            const timeTextW = ctx.measureText(timeText).width;
+            const timeBoxW = timeTextW + 12;
+            const timeBoxX = Math.max(pad.left, Math.min(L.W - pad.right - timeBoxW, xCenter - timeBoxW / 2));
+            const timeBoxY = L.H - pad.bottom + 1;
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(timeBoxX, timeBoxY, timeBoxW, 18);
+            ctx.strokeStyle = 'rgba(96,165,250,0.6)';
+            ctx.strokeRect(timeBoxX + 0.5, timeBoxY + 0.5, timeBoxW - 1, 17);
+            ctx.fillStyle = '#f1f5f9';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeText, timeBoxX + 6, timeBoxY + 9);
+
+            const ohlcLines = [
+                `O: ${fmtNum(c.open, 2)}${suffix}`,
+                `H: ${fmtNum(c.high, 2)}${suffix}`,
+                `L: ${fmtNum(c.low, 2)}${suffix}`,
+                `C: ${fmtNum(c.close, 2)}${suffix}`,
+                `V: ${fmtNum(c.volume, 0)}`
+            ];
+            ctx.font = '11px sans-serif';
+            let boxW = 0;
+            for (const line of ohlcLines) {
+                boxW = Math.max(boxW, ctx.measureText(line).width);
+            }
+            boxW += 16;
+            const boxH = ohlcLines.length * 14 + 10;
+            const boxX = pad.left + 6;
+            const boxY = pad.top + 6;
+            ctx.fillStyle = 'rgba(15,23,42,0.92)';
+            ctx.strokeStyle = 'rgba(96,165,250,0.5)';
+            ctx.lineWidth = 1;
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+            ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ohlcLines.forEach((line, i) => {
+                ctx.fillText(line, boxX + 8, boxY + 6 + i * 14);
+            });
+
+            ctx.restore();
+        }
+
+        function initChartHover() {
+            const canvas = document.getElementById('chartCanvas');
+            if (!canvas) return;
+
+            function updateHover(e) {
+                if (!lastChartLayout || currentCandles.length === 0) {
+                    hoverState = null;
+                    return;
+                }
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const L = lastChartLayout;
+                const { pad, chartW, chartH, n, slotW } = L;
+
+                if (x < pad.left || x > pad.left + chartW || y < pad.top || y > pad.top + chartH) {
+                    if (hoverState) {
+                        hoverState = null;
+                        drawCandles();
+                    }
+                    return;
+                }
+                let idx = Math.floor((x - pad.left) / slotW);
+                if (idx < 0) idx = 0;
+                if (idx >= n) idx = n - 1;
+
+                if (!hoverState || hoverState.index !== idx || Math.abs(hoverState.y - y) > 0.5) {
+                    hoverState = { index: idx, x, y };
+                    drawCandles();
+                }
+            }
+
+            canvas.addEventListener('mousemove', updateHover);
+            canvas.addEventListener('mouseleave', () => {
+                if (hoverState) {
+                    hoverState = null;
+                    drawCandles();
+                }
+            });
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    updateHover({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY });
+                }
+            }, { passive: true });
+            canvas.addEventListener('touchend', () => {
+                if (hoverState) {
+                    hoverState = null;
+                    drawCandles();
+                }
+            });
+        }
+
+        async function addInstrument() {
+            const boardVal = document.getElementById('boardSelect').value;
+            const [engine, market, board] = boardVal.split('/');
+            const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+            if (!ticker) return;
+            const loading = document.getElementById('loading');
+            const errorBox = document.getElementById('errorBox');
+            const btn = document.getElementById('addBtn');
+            loading.style.display = 'block';
+            errorBox.style.display = 'none';
+            btn.disabled = true;
+            try {
+                const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/securities/${encodeURIComponent(ticker)}.json?iss.meta=off`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
+                const data = await res.json();
+                const sec = data.securities;
+                const md = data.marketdata;
+                if (!sec || !sec.data || sec.data.length === 0) {
+                    throw new Error('Инструмент не найден в выбранном режиме торгов. Проверьте тикер и режим.');
+                }
+                const secRow = sec.data[0];
+                const secCols = sec.columns;
+                const mdRow = md.data[0];
+                const mdCols = md.columns;
+                const name = getVal(secRow, secCols, 'SECNAME') || ticker;
+                const last = getVal(mdRow, mdCols, 'LAST');
+                const changePct = getVal(mdRow, mdCols, 'LASTTOPREVPRICE');
+                let couponText = '';
+                if (market === 'bonds') {
+                    const couponPct = getVal(secRow, secCols, 'COUPONPERCENT');
+                    const couponVal = getVal(secRow, secCols, 'COUPONVALUE');
+                    const faceUnit = getVal(secRow, secCols, 'FACEUNIT') || 'RUB';
+                    if (couponPct !== null && couponPct !== '') couponText = fmtNum(couponPct, 2) + '%';
+                    if (couponVal !== null && couponVal !== '') {
+                        const unit = faceUnit === 'USD' ? '$' : (faceUnit === 'EUR' ? '€' : '₽');
+                        couponText += (couponText ? ' / ' : '') + fmtNum(couponVal, 2) + unit;
+                    }
+                }
+                const inst = {
+                    ticker, board, market, engine, name, last,
+                    changePct: changePct !== null ? Number(changePct) : null,
+                    couponText
+                };
+                const dupIndex = instruments.findIndex(i => i.ticker === ticker && i.board === board);
+                if (dupIndex >= 0) {
+                    instruments[dupIndex] = inst;
+                    setActive(dupIndex);
+                } else {
+                    instruments.push(inst);
+                    setActive(instruments.length - 1);
+                }
+                document.getElementById('tickerInput').value = '';
+                saveInstruments();
+            } catch (e) {
+                errorBox.textContent = e.message || 'Не удалось загрузить данные. Попробуйте позже.';
+                errorBox.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        }
+
+        async function refreshAllInstruments() {
+            for (let i = 0; i < instruments.length; i++) {
+                const inst = instruments[i];
+                try {
+                    const url = `https://iss.moex.com/iss/engines/${inst.engine}/markets/${inst.market}/boards/${inst.board}/securities/${encodeURIComponent(inst.ticker)}.json?iss.meta=off`;
+                    const res = await fetch(url);
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    const sec = data.securities;
+                    const md = data.marketdata;
+                    if (!sec || !sec.data || sec.data.length === 0) continue;
+                    const secRow = sec.data[0];
+                    const secCols = sec.columns;
+                    const mdRow = md.data[0];
+                    const mdCols = md.columns;
+                    instruments[i].name = getVal(secRow, secCols, 'SECNAME') || inst.ticker;
+                    instruments[i].last = getVal(mdRow, mdCols, 'LAST');
+                    const cp = getVal(mdRow, mdCols, 'LASTTOPREVPRICE');
+                    instruments[i].changePct = cp !== null && cp !== undefined ? Number(cp) : null;
+                    if (inst.market === 'bonds') {
+                        const couponPct = getVal(secRow, secCols, 'COUPONPERCENT');
+                        const couponVal = getVal(secRow, secCols, 'COUPONVALUE');
+                        const faceUnit = getVal(secRow, secCols, 'FACEUNIT') || 'RUB';
+                        let ct = '';
+                        if (couponPct !== null && couponPct !== '') ct = fmtNum(couponPct, 2) + '%';
+                        if (couponVal !== null && couponVal !== '') {
+                            const unit = faceUnit === 'USD' ? '$' : (faceUnit === 'EUR' ? '€' : '₽');
+                            ct += (ct ? ' / ' : '') + fmtNum(couponVal, 2) + unit;
+                        }
+                        instruments[i].couponText = ct;
+                    }
+                } catch (e) {}
+            }
+            renderList();
+            if (activeIndex >= 0 && activeIndex < instruments.length) {
+                const inst = instruments[activeIndex];
+                document.getElementById('resName').textContent = inst.name;
+                document.getElementById('resPrice').textContent = fmtNum(inst.last, 2) + getPriceSuffix(inst.market);
+                const changeEl = document.getElementById('resChange');
+                if (inst.changePct !== null && inst.changePct !== '') {
+                    const v = Number(inst.changePct);
+                    const sign = v > 0 ? '+' : '';
+                    changeEl.textContent = sign + fmtNum(v, 2) + '%';
+                    changeEl.style.color = v > 0 ? 'var(--success)' : (v < 0 ? 'var(--error)' : 'var(--text)');
+                }
+                updateExportInstrument();
+            }
+        }
+
+        async function refreshEverything(showSpinner) {
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (showSpinner && refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = 'Обновление…';
+            }
+            try {
+                const tasks = [
+                    refreshAllInstruments(),
+                    loadMarketMap(),
+                    loadGainers(),
+                    loadLosers()
+                ];
+                await Promise.allSettled(tasks);
+                if (activeIndex >= 0 && activeIndex < instruments.length) {
+                    await loadCandlesForActive();
+                }
+            } finally {
+                if (showSpinner && refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = 'Обновить все';
+                }
+            }
+        }
+
+        // === Автообновление раз в минуту ===
+        let autoRefreshTimer = null;
+
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            autoRefreshTimer = setInterval(() => {
+                if (document.hidden) return;
+                refreshEverything(false);
+            }, AUTO_REFRESH_INTERVAL);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
+        }
+
+        function initAutoRefresh() {
+            startAutoRefresh();
+            document.addEventListener('visibilitychange', () => {
+                const badge = document.getElementById('autoBadge');
+                const text = document.getElementById('autoBadgeText');
+                if (document.hidden) {
+                    if (badge) badge.style.opacity = '0.5';
+                    if (text) text.textContent = 'Автообновление: пауза';
+                } else {
+                    if (badge) badge.style.opacity = '1';
+                    if (text) text.textContent = 'Автообновление: вкл';
+                    refreshEverything(false);
+                }
+            });
+        }
+
+        async function fetchBoardSecurities(boardPath) {
+            const [engine, market, board] = boardPath.split('/');
+            const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/securities.json?iss.meta=off&iss.only=securities,marketdata`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('fetch failed');
+            const data = await res.json();
+
+            const namesMap = {};
+            if (data.securities && data.securities.data) {
+                const sCols = data.securities.columns;
+                const iSecId = sCols.indexOf('SECID');
+                const iSecName = sCols.indexOf('SECNAME');
+                if (iSecId >= 0 && iSecName >= 0) {
+                    for (const row of data.securities.data) {
+                        namesMap[row[iSecId]] = row[iSecName];
+                    }
+                }
+            }
+
+            const md = data.marketdata;
+            if (!md || !md.data || md.data.length === 0) return [];
+            const cols = md.columns;
+            const iTicker = cols.indexOf('SECID');
+            const iLast = cols.indexOf('LAST');
+            const iChange = cols.indexOf('LASTTOPREVPRICE');
+            const iVol = cols.indexOf('VALTODAY');
+
+            return md.data.map(row => {
+                const ticker = row[iTicker];
+                return {
+                    ticker,
+                    name: namesMap[ticker] || ticker,
+                    last: row[iLast],
+                    changePct: row[iChange] !== null ? Number(row[iChange]) : null,
+                    volume: row[iVol] || 0
+                };
+            });
+        }
+
+        async function loadMarketMap() {
+            const loading = document.getElementById('mapLoading');
+            const grid = document.getElementById('mapGrid');
+            loading.style.display = 'block';
+            loading.innerHTML = '<span class="spinner"></span>Загрузка…';
+            grid.style.display = 'none';
+            try {
+                const items = await fetchBoardSecurities(mapState.board);
+                mapState.items = items
+                    .filter(i => i.volume > 0 && i.last !== null)
+                    .sort((a, b) => b.volume - a.volume)
+                    .slice(0, mapState.count);
+                renderMap();
+            } catch (e) {
+                loading.textContent = 'Не удалось загрузить';
+            }
+        }
+
+        function renderMap() {
+            const grid = document.getElementById('mapGrid');
+            const loading = document.getElementById('mapLoading');
+            loading.style.display = 'none';
+            grid.style.display = 'grid';
+            grid.innerHTML = '';
+            if (mapState.items.length === 0) {
+                grid.innerHTML = '<div class="empty-state-small">Нет данных</div>';
+                return;
+            }
+            mapState.items.forEach(item => {
+                const tile = document.createElement('div');
+                const isUp = item.changePct >= 0;
+                tile.className = 'map-tile ' + (isUp ? 'up' : 'down');
+                const sign = isUp ? '+' : '';
+                tile.innerHTML = `
+                    <div class="map-ticker">${item.ticker}</div>
+                    <div class="map-vol">${fmtVol(item.volume)}</div>
+                    <div class="map-change">${sign}${fmtNum(item.changePct, 2)}%</div>
+                `;
+                tile.addEventListener('click', () => {
+                    document.getElementById('boardSelect').value = mapState.board;
+                    document.getElementById('tickerInput').value = item.ticker;
+                    addInstrument();
+                });
+                grid.appendChild(tile);
+            });
+        }
+
+        async function loadGainers() {
+            const loading = document.getElementById('gainersLoading');
+            const list = document.getElementById('gainersList');
+            loading.style.display = 'block';
+            loading.innerHTML = '<span class="spinner"></span>Загрузка…';
+            list.style.display = 'none';
+            try {
+                const items = await fetchBoardSecurities(gainersState.board);
+                const valid = items.filter(i => i.last !== null && i.changePct !== null && i.volume > 0);
+                gainersState.items = valid
+                    .filter(i => i.changePct > 0)
+                    .sort((a, b) => b.changePct - a.changePct)
+                    .slice(0, gainersState.count);
+                renderTopList('gainers');
+            } catch (e) {
+                loading.textContent = 'Не удалось загрузить';
+            }
+        }
+
+        async function loadLosers() {
+            const loading = document.getElementById('losersLoading');
+            const list = document.getElementById('losersList');
+            loading.style.display = 'block';
+            loading.innerHTML = '<span class="spinner"></span>Загрузка…';
+            list.style.display = 'none';
+            try {
+                const items = await fetchBoardSecurities(losersState.board);
+                const valid = items.filter(i => i.last !== null && i.changePct !== null && i.volume > 0);
+                losersState.items = valid
+                    .filter(i => i.changePct < 0)
+                    .sort((a, b) => a.changePct - b.changePct)
+                    .slice(0, losersState.count);
+                renderTopList('losers');
+            } catch (e) {
+                loading.textContent = 'Не удалось загрузить';
+            }
+        }
+
+        function renderTopList(type) {
+            const state = type === 'gainers' ? gainersState : losersState;
+            const listId = type === 'gainers' ? 'gainersList' : 'losersList';
+            const loadingId = type === 'gainers' ? 'gainersLoading' : 'losersLoading';
+            const listEl = document.getElementById(listId);
+            const loadingEl = document.getElementById(loadingId);
+            loadingEl.style.display = 'none';
+            listEl.style.display = 'flex';
+            listEl.innerHTML = '';
+            if (state.items.length === 0) {
+                listEl.innerHTML = '<div class="empty-state-small">Нет данных</div>';
+                return;
+            }
+            state.items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'top-item ' + (type === 'gainers' ? 'gainer' : 'loser');
+                const sign = type === 'gainers' ? '+' : '';
+                div.innerHTML = `
+                    <span class="top-ticker">${item.ticker}</span>
+                    <span class="top-name">${item.name}</span>
+                    <span class="top-price">${fmtNum(item.last, 2)}₽</span>
+                    <span class="top-change">${sign}${fmtNum(item.changePct, 2)}%</span>
+                `;
+                div.addEventListener('click', () => {
+                    document.getElementById('boardSelect').value = state.board;
+                    document.getElementById('tickerInput').value = item.ticker;
+                    addInstrument();
+                });
+                listEl.appendChild(div);
+            });
+        }
+
+        // === Блок "Резкое изменение цены" ===
+        // Оптимизация: один запрос свечей по всей борде вместо N запросов по тикерам.
+        async function fetchBoardCandles10m(boardPath, fromIso, tillIso, onProgress) {
+            const [engine, market, board] = boardPath.split('/');
+            const all = [];
+            let start = 0;
+            const limit = 500;
+            const maxPages = 60;
+            let page = 0;
+            let lastStart = -1;
+
+            while (page < maxPages) {
+                if (start === lastStart) break;
+                lastStart = start;
+                page++;
+
+                const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/candles.json`
+                    + `?from=${fromIso}&till=${tillIso}&interval=10&start=${start}&iss.meta=off&iss.only=candles`;
+
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('ISS error: ' + res.status);
+                const data = await res.json();
+                const cd = data.candles;
+                if (!cd || !cd.data || cd.data.length === 0) break;
+
+                const cols = cd.columns;
+                const iSecId = cols.indexOf('SECID');
+                const iOpen = cols.indexOf('open');
+                const iHigh = cols.indexOf('high');
+                const iLow = cols.indexOf('low');
+                const iClose = cols.indexOf('close');
+                const iBegin = cols.indexOf('begin');
+                const iValue = cols.indexOf('value');
+
+                for (const row of cd.data) {
+                    all.push({
+                        secid: row[iSecId],
+                        begin: row[iBegin],
+                        open: row[iOpen],
+                        high: row[iHigh],
+                        low: row[iLow],
+                        close: row[iClose],
+                        value: iValue >= 0 ? row[iValue] : 0
+                    });
+                }
+                if (onProgress) onProgress(all.length);
+
+                if (cd.data.length < limit) break;
+                start += cd.data.length;
+            }
+            return all;
+        }
+
+        // Запасной вариант: список тикеров борды → топ-N по обороту → свечи 10м по каждому.
+        async function fetchBoardCandlesFallback(boardPath, fromIso, tillIso, topN, onProgress) {
+            const securities = await fetchBoardSecurities(boardPath);
+            const sorted = securities
+                .filter(s => s.volume > 0 && s.last !== null)
+                .sort((a, b) => b.volume - a.volume)
+                .slice(0, topN);
+
+            const [engine, market, board] = boardPath.split('/');
+            const all = [];
+            let done = 0;
+
+            const BATCH = 6;
+            for (let i = 0; i < sorted.length; i += BATCH) {
+                const batch = sorted.slice(i, i + BATCH);
+                const results = await Promise.allSettled(batch.map(async (s) => {
+                    const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/securities/${encodeURIComponent(s.ticker)}/candles.json`
+                        + `?from=${fromIso}&till=${tillIso}&interval=10&iss.meta=off`;
+                    const res = await fetch(url);
+                    if (!res.ok) return [];
+                    const data = await res.json();
+                    const cd = data.candles;
+                    if (!cd || !cd.data) return [];
+                    const cols = cd.columns;
+                    const iOpen = cols.indexOf('open');
+                    const iHigh = cols.indexOf('high');
+                    const iLow = cols.indexOf('low');
+                    const iClose = cols.indexOf('close');
+                    const iBegin = cols.indexOf('begin');
+                    const iValue = cols.indexOf('value');
+                    return cd.data.map(row => ({
+                        secid: s.ticker,
+                        begin: row[iBegin],
+                        open: row[iOpen],
+                        high: row[iHigh],
+                        low: row[iLow],
+                        close: row[iClose],
+                        value: iValue >= 0 ? row[iValue] : 0
+                    }));
+                }));
+                for (const r of results) {
+                    if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+                        for (const c of r.value) all.push(c);
+                    }
+                }
+                done += batch.length;
+                if (onProgress) onProgress(all.length, done, sorted.length);
+            }
+            return all;
+        }
+
+        async function loadSpikes() {
+            const loading = document.getElementById('spikesLoading');
+            const list = document.getElementById('spikesList');
+            const summary = document.getElementById('spikesSummary');
+            const btn = document.getElementById('spikesRefreshBtn');
+
+            loading.style.display = 'block';
+            loading.innerHTML = '<span class="spinner"></span>Сканируем рынок…';
+            list.style.display = 'none';
+            summary.textContent = '';
+            btn.disabled = true;
+
+            const today = getTodayStr();
+            const threshold = spikesState.threshold;
+
+            try {
+                let candles = [];
+                try {
+                    candles = await fetchBoardCandles10m(spikesState.board, today, today, (n) => {
+                        loading.innerHTML = `<span class="spinner"></span>Загружено свечей: ${n}…`;
+                    });
+                } catch (e) {
+                    candles = [];
+                }
+
+                if (candles.length === 0) {
+                    loading.innerHTML = '<span class="spinner"></span>Пробуем альтернативный запрос…';
+                    candles = await fetchBoardCandlesFallback(spikesState.board, today, today, 50, (n, done, total) => {
+                        loading.innerHTML = `<span class="spinner"></span>Обработано ${done}/${total}, свечей: ${n}…`;
+                    });
+                }
+
+                if (candles.length === 0) {
+                    spikesState.items = [];
+                    renderSpikes();
+                    summary.textContent = 'Нет данных за текущий день';
+                    return;
+                }
+
+                // Имена инструментов — как в блоке поиска
+                let namesMap = {};
+                try {
+                    const secs = await fetchBoardSecurities(spikesState.board);
+                    for (const s of secs) namesMap[s.ticker] = s.name;
+                } catch (e) {}
+
+                // Группируем по SECID, ищем свечу с максимальным % (high-low)/low
+                const byTicker = new Map();
+                for (const c of candles) {
+                    if (!c || c.high == null || c.low == null || c.low <= 0) continue;
+                    const diffPct = ((c.high - c.low) / c.low) * 100;
+                    const prev = byTicker.get(c.secid);
+                    if (!prev || diffPct > prev.diffPct) {
+                        byTicker.set(c.secid, {
+                            ticker: c.secid,
+                            name: namesMap[c.secid] || c.secid,
+                            begin: c.begin,
+                            open: c.open,
+                            close: c.close,
+                            high: c.high,
+                            low: c.low,
+                            diffPct,
+                            bullish: Number(c.close) >= Number(c.open)
+                        });
+                    }
+                }
+
+                // Фильтр по порогу + сортировка по времени свечи (от большего к меньшему)
+                const filtered = Array.from(byTicker.values())
+                    .filter(x => x.diffPct >= threshold)
+                    .sort((a, b) => {
+                        const ta = a.begin || '';
+                        const tb = b.begin || '';
+                        if (ta !== tb) return tb.localeCompare(ta);
+                        return b.diffPct - a.diffPct;
+                    })
+                    .slice(0, spikesState.count);
+
+                spikesState.items = filtered;
+                renderSpikes();
+                summary.textContent = `Найдено ${filtered.length} инструм. с изменением ≥ ${threshold}% за 10 мин (всего свечей: ${candles.length})`;
+            } catch (e) {
+                loading.style.display = 'block';
+                loading.textContent = 'Не удалось загрузить: ' + (e.message || 'ошибка');
+                list.style.display = 'none';
+                summary.textContent = '';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function renderSpikes() {
+            const listEl = document.getElementById('spikesList');
+            const loadingEl = document.getElementById('spikesLoading');
+            loadingEl.style.display = 'none';
+            listEl.style.display = 'flex';
+            listEl.innerHTML = '';
+
+            if (!spikesState.items || spikesState.items.length === 0) {
+                listEl.innerHTML = '<div class="empty-state-small">Нет инструментов с таким изменением</div>';
+                return;
+            }
+
+            spikesState.items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'spike-item ' + (item.bullish ? 'bull' : 'bear');
+                const timeLabel = formatRuDateTime(item.begin);
+                const sign = item.bullish ? '+' : '-';
+                div.innerHTML = `
+                    <span class="spike-ticker">${item.ticker}</span>
+                    <span class="spike-name" title="${item.name}">${item.name}</span>
+                    <span class="spike-time">${timeLabel}</span>
+                    <span class="spike-prices">${fmtNum(item.low, 2)} → ${fmtNum(item.high, 2)}</span>
+                    <span class="spike-change">${sign}${fmtNum(item.diffPct, 2)}%</span>
+                `;
+                div.addEventListener('click', () => {
+                    document.getElementById('boardSelect').value = spikesState.board;
+                    document.getElementById('tickerInput').value = item.ticker;
+                    addInstrument();
+                });
+                listEl.appendChild(div);
+            });
+        }
+
+        // === Автообновление блока спайков раз в 10 минут ===
+        let spikesAutoTimer = null;
+
+        function startSpikesAutoRefresh() {
+            stopSpikesAutoRefresh();
+            spikesAutoTimer = setInterval(() => {
+                if (document.hidden) return;
+                loadSpikes();
+            }, SPIKES_AUTO_REFRESH_INTERVAL);
+        }
+
+        function stopSpikesAutoRefresh() {
+            if (spikesAutoTimer) {
+                clearInterval(spikesAutoTimer);
+                spikesAutoTimer = null;
+            }
+        }
+
+        // === Обработчики блока спайков ===
+        function initSpikesControls() {
+            document.getElementById('spikesBoard').value = spikesState.board;
+            document.getElementById('spikesCount').value = spikesState.count;
+            document.getElementById('spikesThreshold').value = spikesState.threshold;
+
+            document.getElementById('spikesBoard').addEventListener('change', (e) => {
+                spikesState.board = e.target.value;
+                saveBlocks();
+            });
+            document.getElementById('spikesCount').addEventListener('change', (e) => {
+                spikesState.count = clampCount(e.target.value, 10);
+                e.target.value = spikesState.count;
+                saveBlocks();
+            });
+            document.getElementById('spikesThreshold').addEventListener('change', (e) => {
+                spikesState.threshold = clampThreshold(e.target.value, 1);
+                e.target.value = spikesState.threshold;
+                saveBlocks();
+            });
+            document.getElementById('spikesRefreshBtn').addEventListener('click', () => {
+                loadSpikes();
+            });
+
+            startSpikesAutoRefresh();
+        }
+
+        function applyIntervalLimit(isoDate, iv, showWarning) {
+            const today = getTodayStr();
+            if (!isoDate) return null;
+            const maxDays = INTERVAL_MAX_DAYS[iv];
+            if (maxDays === undefined) return isoDate;
+            const diffDays = Math.round((Date.parse(today) - Date.parse(isoDate)) / 86400000);
+            if (diffDays <= maxDays) return isoDate;
+            const minDate = new Date(today + 'T00:00:00');
+            minDate.setDate(minDate.getDate() - maxDays);
+            const yyyy = minDate.getFullYear();
+            const mm = String(minDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(minDate.getDate()).padStart(2, '0');
+            const shifted = `${yyyy}-${mm}-${dd}`;
+            if (showWarning) {
+                const errorBox = document.getElementById('errorBox');
+                errorBox.textContent = `Для интервала ${intervalLabel(iv)} ISS отдаёт данные только за последние ${maxDays} дн. Дата автоматически сдвинута на ${formatRuDate(shifted)}.`;
+                errorBox.style.display = 'block';
+            }
+            return shifted;
+        }
+
+        function onDateChange() {
+            clearTimeout(dateChangeTimer);
+            dateChangeTimer = setTimeout(() => {
+                const errorBox = document.getElementById('errorBox');
+                errorBox.style.display = 'none';
+                const input = document.getElementById('dateFromInput');
+                let val = input.value;
+                if (!val) {
+                    chartFromDate = null;
+                    loadCandlesForActive();
+                    return;
+                }
+                const today = getTodayStr();
+                if (val > today) { input.value = today; val = today; }
+                if (val < '2010-01-01') { input.value = '2010-01-01'; val = '2010-01-01'; }
+                const iv = getSelectedInterval();
+                const limited = applyIntervalLimit(val, iv, true);
+                if (limited !== val) { input.value = limited; val = limited; }
+                chartFromDate = val;
+                loadCandlesForActive();
+            }, 400);
+        }
+
+        function onIntervalChange() {
+            const errorBox = document.getElementById('errorBox');
+            errorBox.style.display = 'none';
+            const iv = getSelectedInterval();
+            if (!chartFromDate) {
+                loadCandlesForActive();
+                return;
+            }
+            const input = document.getElementById('dateFromInput');
+            const limited = applyIntervalLimit(chartFromDate, iv, true);
+            if (limited !== chartFromDate) {
+                chartFromDate = limited;
+                input.value = limited;
+            }
+            loadCandlesForActive();
+        }
+
+        function onResetPeriod() {
+            chartFromDate = null;
+            document.getElementById('dateFromInput').value = '';
+            document.getElementById('errorBox').style.display = 'none';
+            loadCandlesForActive();
+        }
+
+        function saveInstruments() {
+            try {
+                const data = instruments.map(i => ({
+                    ticker: i.ticker, board: i.board, market: i.market, engine: i.engine,
+                    name: i.name, last: i.last, changePct: i.changePct, couponText: i.couponText
+                }));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                localStorage.setItem(STORAGE_ACTIVE_KEY, String(activeIndex));
+            } catch (e) {}
+        }
+
+        function loadInstruments() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return false;
+                const data = JSON.parse(raw);
+                if (!Array.isArray(data)) return false;
+                instruments = data.map(i => ({
+                    ticker: i.ticker, board: i.board, market: i.market, engine: i.engine,
+                    name: i.name || i.ticker, last: i.last, changePct: i.changePct,
+                    couponText: i.couponText || ''
+                }));
+                const savedActive = localStorage.getItem(STORAGE_ACTIVE_KEY);
+                activeIndex = savedActive !== null ? parseInt(savedActive, 10) : -1;
+                if (!Number.isFinite(activeIndex) || activeIndex >= instruments.length) activeIndex = -1;
+                return true;
+            } catch (e) { return false; }
+        }
+
+        function clearSavedInstruments() {
+            try {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(STORAGE_ACTIVE_KEY);
+            } catch (e) {}
+        }
+
+        function initBlockControls() {
+            document.getElementById('mapBoard').value = mapState.board;
+            document.getElementById('mapCount').value = mapState.count;
+            document.getElementById('gainersBoard').value = gainersState.board;
+            document.getElementById('gainersCount').value = gainersState.count;
+            document.getElementById('losersBoard').value = losersState.board;
+            document.getElementById('losersCount').value = losersState.count;
+
+            document.getElementById('mapBoard').addEventListener('change', (e) => {
+                mapState.board = e.target.value;
+                saveBlocks();
+                loadMarketMap();
+            });
+            document.getElementById('mapCount').addEventListener('change', (e) => {
+                mapState.count = clampCount(e.target.value, 5);
+                e.target.value = mapState.count;
+                saveBlocks();
+                loadMarketMap();
+            });
+
+            document.getElementById('gainersBoard').addEventListener('change', (e) => {
+                gainersState.board = e.target.value;
+                saveBlocks();
+                loadGainers();
+            });
+            document.getElementById('gainersCount').addEventListener('change', (e) => {
+                gainersState.count = clampCount(e.target.value, 5);
+                e.target.value = gainersState.count;
+                saveBlocks();
+                loadGainers();
+            });
+
+            document.getElementById('losersBoard').addEventListener('change', (e) => {
+                losersState.board = e.target.value;
+                saveBlocks();
+                loadLosers();
+            });
+            document.getElementById('losersCount').addEventListener('change', (e) => {
+                losersState.count = clampCount(e.target.value, 5);
+                e.target.value = losersState.count;
+                saveBlocks();
+                loadLosers();
+            });
+        }
+
+        // === Обработчики ===
+        document.getElementById('addBtn').addEventListener('click', addInstrument);
+        document.getElementById('tickerInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addInstrument();
+        });
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            refreshEverything(true);
+        });
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (!confirm('Очистить весь список инструментов?')) return;
+            instruments = [];
+            activeIndex = -1;
+            currentCandles = [];
+            hoverState = null;
+            chartFromDate = null;
+            document.getElementById('dateFromInput').value = '';
+            clearSavedInstruments();
+            renderList();
+            document.getElementById('detailBox').classList.add('hidden');
+            document.getElementById('chartPlaceholder').style.display = 'flex';
+        });
+
+        document.getElementById('dateFromInput').addEventListener('change', onDateChange);
+        document.getElementById('intervalSelect').addEventListener('change', onIntervalChange);
+        document.getElementById('resetPeriodBtn').addEventListener('click', onResetPeriod);
+        document.getElementById('resetLayoutBtn').addEventListener('click', resetLayout);
+
+        document.getElementById('dateFromInput').max = getTodayStr();
+
+        document.getElementById('instrumentList').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action="remove"]');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.index);
+            instruments.splice(idx, 1);
+            if (activeIndex === idx) {
+                activeIndex = -1;
+                currentCandles = [];
+                hoverState = null;
+            } else if (activeIndex > idx) activeIndex--;
+            saveInstruments();
+            renderList();
+            if (activeIndex >= 0 && activeIndex < instruments.length) setActive(activeIndex);
+            else if (instruments.length === 0) {
+                document.getElementById('detailBox').classList.add('hidden');
+                document.getElementById('chartPlaceholder').style.display = 'flex';
+                updateExportInstrument();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (!document.getElementById('detailBox').classList.contains('hidden')) {
+                drawCandles();
+            }
+        });
+
+        (async function init() {
+            const savedLayout = loadLayout();
+            applyLayout(savedLayout);
+            initDragDrop();
+            initCardResize();
+            initCanvasObserver();
+            initChartHover();
+
+            loadBlocks();
+            initBlockControls();
+            initSpikesControls();
+
+            loadExportState();
+            initExportControls();
+
+            const hasSaved = loadInstruments();
+            renderList();
+            if (hasSaved && activeIndex >= 0 && activeIndex < instruments.length) {
+                await showDetail(instruments[activeIndex]);
+            } else {
+                document.getElementById('chartPlaceholder').style.display = 'flex';
+                updateExportInstrument();
+            }
+
+            await refreshEverything(false);
+            initAutoRefresh();
+        })();
+    </script>
+</body>
+</html>
