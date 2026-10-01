@@ -519,7 +519,6 @@
         }
         .spike-item:hover { transform: scale(1.02); opacity: 0.95; }
 
-        /* Зелёная строка — close >= open */
         .spike-item.bull {
             border-color: rgba(34,197,94,0.35);
             background: var(--success-bg);
@@ -528,7 +527,6 @@
         .spike-item.bull .spike-ticker,
         .spike-item.bull .spike-change { color: var(--success); }
 
-        /* Красная строка — close < open */
         .spike-item.bear {
             border-color: rgba(239,68,68,0.35);
             background: var(--error-bg);
@@ -573,7 +571,7 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* Групповая строка (когда > 5 свечей по одному SECID) */
+        /* Групповая строка (> 5 свечей по одному SECID) */
         .spike-group {
             display: flex;
             flex-direction: column;
@@ -598,14 +596,14 @@
         }
         .spike-group-header.bull:hover { background: rgba(34,197,94,0.22); }
         .spike-group-header.bull .spike-ticker,
-        .spike-group-header.bull .spike-change { color: var(--success); }
+        .spike-group-header.bull .spike-max-change { color: var(--success); }
         .spike-group-header.bear {
             border-color: rgba(239,68,68,0.35);
             background: var(--error-bg);
         }
         .spike-group-header.bear:hover { background: rgba(239,68,68,0.22); }
         .spike-group-header.bear .spike-ticker,
-        .spike-group-header.bear .spike-change { color: var(--error); }
+        .spike-group-header.bear .spike-max-change { color: var(--error); }
 
         .spike-group-header .spike-toggle {
             width: 22px;
@@ -1035,8 +1033,8 @@
                     <option value="currency/selt/CETS">CETS</option>
                     <option value="futures/forts/SPBFUT">SPBFUT</option>
                 </select>
-                <label title="Количество отображаемых строк (1–200)">Кол-во</label>
-                <input id="spikesCount" type="number" min="1" max="200" value="20">
+                <label title="Сколько инструментов проверять (топ по обороту, 1–1000)">Проверить</label>
+                <input id="spikesScanLimit" type="number" min="1" max="1000" value="100">
                 <label title="Порог размаха свечи (high-low)/low, %">Порог, %</label>
                 <input id="spikesThreshold" type="number" min="0.1" max="100" step="0.1" value="1">
                 <button id="spikesRefreshBtn" class="btn-secondary">Обновить</button>
@@ -1112,10 +1110,9 @@
         const mapState = { board: 'stock/shares/TQBR', count: 5, items: [] };
         const gainersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
         const losersState = { board: 'stock/shares/TQBR', count: 5, items: [] };
-        // rows — итоговые строки (учитывая группировку), items — плоский список свечей
-        const spikesState = { board: 'stock/shares/TQBR', count: 20, threshold: 1, rows: [], items: [], lastBegin: null };
+        // scanLimit — сколько инструментов проверять (топ по обороту), по умолчанию 100
+        const spikesState = { board: 'stock/shares/TQBR', scanLimit: 100, threshold: 1, rows: [], items: [], lastBegin: null };
 
-        // Свечей больше этого количества по одному SECID — группируем в одну строку со сворачиванием
         const SPIKE_GROUP_THRESHOLD = 5;
 
         const INTERVAL_MAX_DAYS = { 10: 2, 60: 365, 24: 3650, 7: 3650 };
@@ -1123,7 +1120,7 @@
         const STORAGE_KEY = 'moex_instruments_v1';
         const STORAGE_ACTIVE_KEY = 'moex_active_index_v1';
         const STORAGE_LAYOUT_KEY = 'moex_layout_v4';
-        const STORAGE_BLOCKS_KEY = 'moex_blocks_v4';
+        const STORAGE_BLOCKS_KEY = 'moex_blocks_v5';
         const STORAGE_EXPORT_KEY = 'moex_export_v1';
         const STORAGE_SPIKES_EXPANDED_KEY = 'moex_spikes_expanded_v1';
 
@@ -1133,7 +1130,6 @@
         const boardSecuritiesCache = new Map();
         const BOARD_CACHE_TTL = 30 * 1000;
 
-        // Множество раскрытых групп (secid)
         let expandedSpikeGroups = new Set();
         try {
             const raw = localStorage.getItem(STORAGE_SPIKES_EXPANDED_KEY);
@@ -1197,7 +1193,7 @@
                     map: { board: mapState.board, count: mapState.count },
                     gainers: { board: gainersState.board, count: gainersState.count },
                     losers: { board: losersState.board, count: losersState.count },
-                    spikes: { board: spikesState.board, count: spikesState.count, threshold: spikesState.threshold }
+                    spikes: { board: spikesState.board, scanLimit: spikesState.scanLimit, threshold: spikesState.threshold }
                 }));
             } catch (e) {}
         }
@@ -1221,7 +1217,7 @@
                 }
                 if (data.spikes) {
                     spikesState.board = data.spikes.board || spikesState.board;
-                    spikesState.count = clampCount(data.spikes.count, 20, 200);
+                    spikesState.scanLimit = clampCount(data.spikes.scanLimit, 100, 1000);
                     spikesState.threshold = clampThreshold(data.spikes.threshold, 1);
                 }
             } catch (e) {}
@@ -2575,71 +2571,19 @@
         }
 
         // === Блок "Резкое изменение цены" ===
-        async function fetchBoardCandles10m(boardPath, fromIso, tillIso, onProgress) {
-            const [engine, market, board] = boardPath.split('/');
-            const all = [];
-            let start = 0;
-            const limit = 500;
-            const maxPages = 200;
-            let page = 0;
-            let lastStart = -1;
-
-            while (page < maxPages) {
-                if (start === lastStart) break;
-                lastStart = start;
-                page++;
-
-                const url = `https://iss.moex.com/iss/engines/${engine}/markets/${market}/boards/${board}/candles.json`
-                    + `?from=${fromIso}&till=${tillIso}&interval=10&start=${start}&iss.meta=off&iss.only=candles`;
-
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('ISS error: ' + res.status);
-                const data = await res.json();
-                const cd = data.candles;
-                if (!cd || !cd.data || cd.data.length === 0) break;
-
-                const cols = cd.columns;
-                const iSecId = cols.indexOf('SECID');
-                const iOpen = cols.indexOf('open');
-                const iHigh = cols.indexOf('high');
-                const iLow = cols.indexOf('low');
-                const iClose = cols.indexOf('close');
-                const iBegin = cols.indexOf('begin');
-                const iValue = cols.indexOf('value');
-
-                if (iSecId < 0) break;
-
-                for (const row of cd.data) {
-                    const secid = row[iSecId];
-                    if (!secid) continue;
-                    all.push({
-                        secid,
-                        begin: row[iBegin],
-                        open: row[iOpen],
-                        high: row[iHigh],
-                        low: row[iLow],
-                        close: row[iClose],
-                        value: iValue >= 0 ? row[iValue] : 0
-                    });
-                }
-                if (onProgress) onProgress(all.length);
-
-                if (cd.data.length < limit) break;
-                start += cd.data.length;
-            }
-            return all;
-        }
-
-        async function fetchBoardCandlesFallback(boardPath, fromIso, tillIso, topN, onProgress) {
+        // Используем только fallback: список бумаг борды → топ-N по обороту → свечи 10м по каждой.
+        // N = spikesState.scanLimit (по умолчанию 100, настраивается пользователем).
+        async function fetchBoardCandlesForSpikes(boardPath, fromIso, tillIso, scanLimit, onProgress, onBatch) {
             const securities = await fetchBoardSecurities(boardPath);
             const sorted = securities
                 .filter(s => s.volume > 0 && s.last !== null)
                 .sort((a, b) => b.volume - a.volume)
-                .slice(0, topN);
+                .slice(0, scanLimit);
 
             const [engine, market, board] = boardPath.split('/');
             const all = [];
             let done = 0;
+            const total = sorted.length;
 
             const BATCH = 6;
             for (let i = 0; i < sorted.length; i += BATCH) {
@@ -2675,9 +2619,10 @@
                     }
                 }
                 done += batch.length;
-                if (onProgress) onProgress(all.length, done, sorted.length);
+                if (onProgress) onProgress(all.length, done, total);
+                if (onBatch) onBatch(all, done, total);
             }
-            return all;
+            return { candles: all, done, total };
         }
 
         function isCandleClosed(candle, nowMs) {
@@ -2695,7 +2640,7 @@
             const btn = document.getElementById('spikesRefreshBtn');
 
             loading.style.display = 'block';
-            loading.innerHTML = '<span class="spinner"></span>Сканируем рынок…';
+            loading.innerHTML = '<span class="spinner"></span>Готовим список инструментов…';
             list.style.display = 'none';
             summary.textContent = '';
             btn.disabled = true;
@@ -2705,21 +2650,21 @@
             const nowMs = Date.now();
 
             try {
-                let candles = [];
+                // Имена — из общего кэша (используется также картой/топами)
+                let namesMap = {};
                 try {
-                    candles = await fetchBoardCandles10m(spikesState.board, today, today, (n) => {
-                        loading.innerHTML = `<span class="spinner"></span>Загружено свечей: ${n}…`;
-                    });
-                } catch (e) {
-                    candles = [];
-                }
+                    const secs = await fetchBoardSecurities(spikesState.board);
+                    for (const s of secs) namesMap[s.ticker] = s.name;
+                } catch (e) {}
 
-                if (candles.length === 0) {
-                    loading.innerHTML = '<span class="spinner"></span>Пробуем альтернативный запрос…';
-                    candles = await fetchBoardCandlesFallback(spikesState.board, today, today, 50, (n, done, total) => {
-                        loading.innerHTML = `<span class="spinner"></span>Обработано ${done}/${total}, свечей: ${n}…`;
-                    });
-                }
+                loading.innerHTML = `<span class="spinner"></span>Загружаем свечи по ${spikesState.scanLimit} инструментам…`;
+
+                const { candles, done, total } = await fetchBoardCandlesForSpikes(
+                    spikesState.board, today, today, spikesState.scanLimit,
+                    (n, d, t) => {
+                        loading.innerHTML = `<span class="spinner"></span>Загружаем свечи: ${d}/${t}, получено ${n}…`;
+                    }
+                );
 
                 if (candles.length === 0) {
                     spikesState.items = [];
@@ -2730,12 +2675,6 @@
                     summary.textContent = 'Нет данных за текущий день';
                     return;
                 }
-
-                let namesMap = {};
-                try {
-                    const secs = await fetchBoardSecurities(spikesState.board);
-                    for (const s of secs) namesMap[s.ticker] = s.name;
-                } catch (e) {}
 
                 // Все свечи выше порога
                 const allItems = [];
@@ -2765,7 +2704,6 @@
                     });
                 }
 
-                // Сортировка: новые свечи сначала, при равенстве — по убыванию размаха
                 allItems.sort((a, b) => {
                     const ta = a.begin || '';
                     const tb = b.begin || '';
@@ -2776,13 +2714,8 @@
                 spikesState.items = allItems;
                 spikesState.lastBegin = lastBegin;
 
-                // Группировка в строки. Если по одному SECID больше SPIKE_GROUP_THRESHOLD свечей — сворачиваем.
                 const rows = buildSpikeRows(allItems);
-                spikesState.rows = rows;
-
-                // Обрезаем строки до лимита "Кол-во". Групповая строка считается за одну строку.
-                const sliced = rows.slice(0, spikesState.count);
-                spikesState.rows = sliced;
+                spikesState.rows = rows; // без slice — выводим все строки
 
                 const timeEl = document.getElementById('spikesHandleTime');
                 if (lastBegin) {
@@ -2795,7 +2728,7 @@
 
                 const totalCandles = allItems.length;
                 const totalRows = rows.length;
-                summary.textContent = `Строк: ${sliced.length} из ${totalRows} (свечей ≥ ${threshold}%: ${totalCandles}, всего проверено: ${candles.length})`;
+                summary.textContent = `Строк: ${totalRows} (свечей ≥ ${threshold}%: ${totalCandles}); проверено инструментов: ${done}/${total}`;
             } catch (e) {
                 loading.style.display = 'block';
                 loading.textContent = 'Не удалось загрузить: ' + (e.message || 'ошибка');
@@ -2806,11 +2739,8 @@
             }
         }
 
-        // Группируем плоский список свечей в строки отображения.
-        // Если по одному SECID > SPIKE_GROUP_THRESHOLD свечей — делаем одну групповую строку.
         function buildSpikeRows(items) {
-            // Группируем по secid, сохраняя порядок первого появления (уже отсортирован по времени desc)
-            const groups = new Map(); // secid -> { secid, name, candles: [], firstIndex }
+            const groups = new Map();
             for (let i = 0; i < items.length; i++) {
                 const it = items[i];
                 if (!groups.has(it.ticker)) {
@@ -2833,10 +2763,7 @@
                 seen.add(it.ticker);
 
                 if (g.candles.length > SPIKE_GROUP_THRESHOLD) {
-                    // Групповая строка
-                    // Свеча для отображения сверху — самая новая (уже первая в candles)
                     const head = g.candles[0];
-                    // Максимальный размах в группе для индикатора
                     let maxDiff = -Infinity;
                     let maxBull = true;
                     for (const c of g.candles) {
@@ -2853,11 +2780,9 @@
                         head,
                         maxDiff,
                         maxBull,
-                        // Для сортировки: позиция первого появления в отсортированном списке
                         sortIndex: g.firstIndex
                     });
                 } else {
-                    // Обычные строки — каждая свеча отдельно
                     for (const c of g.candles) {
                         rows.push({
                             type: 'single',
@@ -2870,9 +2795,6 @@
                 }
             }
 
-            // Сохраняем порядок как в items (уже отсортирован)
-            // Но групповые строки попадают в позицию первой свечи группы — это ок.
-            // Нужно удостовериться, что порядок согласован: пересортируем по sortIndex
             rows.sort((a, b) => a.sortIndex - b.sortIndex);
             return rows;
         }
@@ -2957,7 +2879,6 @@
                 children.appendChild(child);
             });
 
-            // Клик по header: переключение раскрытия. Отдельный клик по тикеру — добавление инструмента.
             header.addEventListener('click', (e) => {
                 if (e.target.closest('.spike-ticker')) {
                     document.getElementById('boardSelect').value = spikesState.board;
@@ -2965,7 +2886,6 @@
                     addInstrument();
                     return;
                 }
-                // toggle
                 if (expandedSpikeGroups.has(row.secid)) {
                     expandedSpikeGroups.delete(row.secid);
                     wrapper.classList.remove('expanded');
@@ -3002,16 +2922,16 @@
         // === Обработчики блока спайков ===
         function initSpikesControls() {
             document.getElementById('spikesBoard').value = spikesState.board;
-            document.getElementById('spikesCount').value = spikesState.count;
+            document.getElementById('spikesScanLimit').value = spikesState.scanLimit;
             document.getElementById('spikesThreshold').value = spikesState.threshold;
 
             document.getElementById('spikesBoard').addEventListener('change', (e) => {
                 spikesState.board = e.target.value;
                 saveBlocks();
             });
-            document.getElementById('spikesCount').addEventListener('change', (e) => {
-                spikesState.count = clampCount(e.target.value, 20, 200);
-                e.target.value = spikesState.count;
+            document.getElementById('spikesScanLimit').addEventListener('change', (e) => {
+                spikesState.scanLimit = clampCount(e.target.value, 100, 1000);
+                e.target.value = spikesState.scanLimit;
                 saveBlocks();
             });
             document.getElementById('spikesThreshold').addEventListener('change', (e) => {
